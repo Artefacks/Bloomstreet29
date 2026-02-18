@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchQuote, batchProcess } from "@/lib/finnhub";
 import { isSimulated, simulatePrice } from "@/lib/price-sim";
+import { matchPendingOrders } from "@/lib/order-matching";
 
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 5200;
@@ -111,6 +112,12 @@ export async function POST(request: NextRequest) {
   };
 
   await batchProcess(usStocks, processUS, BATCH_SIZE, BATCH_DELAY_MS);
+
+  try {
+    await matchPendingOrders(supabase);
+  } catch (e) {
+    console.warn("[prices/refresh] order matching:", e);
+  }
 
   return NextResponse.json({ ok: true, updated: updatedReal + updatedSim, real: updatedReal, simulated: updatedSim });
 }

@@ -191,5 +191,8 @@ export async function GET(request: NextRequest) {
     bgWork().catch((e) => console.warn("[prices GET] US oscillation error:", e));
   }
 
+  // Toujours vérifier les ordres limite (même sans nouveau prix — la DB peut avoir été mise à jour par refresh-public)
+  matchPendingOrders(supabase).catch((e) => console.warn("[prices GET] order matching:", e));
+
   return NextResponse.json({ prices: priceMap });
 }

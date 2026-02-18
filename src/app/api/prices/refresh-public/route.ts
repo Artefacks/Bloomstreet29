@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { fetchQuote, batchProcess } from "@/lib/finnhub";
 import { isSimulated, simulatePrice } from "@/lib/price-sim";
 import { getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
+import { matchPendingOrders } from "@/lib/order-matching";
 
 /** Micro-oscillation déterministe pour les actions US (±0.08%) — simule les petits mouvements réels, aide les ordres limite */
 function usPriceOscillation(price: number, symbol: string, timestampMs: number): number {
@@ -137,6 +138,13 @@ export async function POST(request: NextRequest) {
   };
 
   await batchProcess(usStocks, processUS, BATCH_SIZE, BATCH_DELAY_MS, MAX_DURATION_MS);
+
+  // Vérifier les ordres limite après mise à jour des prix
+  try {
+    await matchPendingOrders(supabase);
+  } catch (e) {
+    console.warn("[prices/refresh-public] order matching:", e);
+  }
 
   return NextResponse.json({
     ok: true,

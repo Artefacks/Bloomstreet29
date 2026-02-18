@@ -63,9 +63,10 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
 
     const limitPrice = Number(order.limit_price);
     const qty = Number(order.qty);
+    const eps = Math.max(0.0001, limitPrice * 0.0001); // tolérance arrondi
     const shouldFill =
-      (order.side === "buy" && marketPrice <= limitPrice) ||
-      (order.side === "sell" && marketPrice >= limitPrice);
+      (order.side === "buy" && marketPrice <= limitPrice + eps) ||
+      (order.side === "sell" && marketPrice >= limitPrice - eps);
 
     if (!shouldFill) continue;
 
