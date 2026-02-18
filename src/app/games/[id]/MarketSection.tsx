@@ -9,6 +9,7 @@ import { NewsFeed } from "./NewsFeed";
 import { SectorOverview } from "./SectorOverview";
 import { SECTORS, getSectorForSymbol, getSectorId, getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
 import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
+import { tickOscillation } from "@/lib/price-oscillation";
 
 type Instrument = {
   symbol: string;
@@ -376,6 +377,15 @@ function DetailPanel({
   allowFractional: boolean;
   onClose: () => void;
 }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setTick((t) => t + 1), 5000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const basePrice = inst.price ?? 0;
+  const livePrice = basePrice > 0 ? tickOscillation(basePrice, inst.symbol, tick) : null;
+
   const sector = getSectorForSymbol(inst.symbol);
   const exchange = getExchangeForSymbol(inst.symbol);
   const marketStatus = isMarketOpen(exchange);
@@ -417,14 +427,15 @@ function DetailPanel({
       </div>
 
       {/* Chart */}
-      <PriceChartSingle symbol={inst.symbol} />
+      <PriceChartSingle symbol={inst.symbol} displayPrice={livePrice} />
 
       {/* Trade form */}
       <div className="pt-2 border-t border-slate-100">
         <GameTradeForm
           gameId={gameId}
           symbol={inst.symbol}
-          price={inst.price}
+          price={livePrice ?? inst.price}
+          tick={tick}
           currency={inst.currency}
           hasPosition={!!position}
           positionQty={position?.qty ?? 0}

@@ -83,25 +83,29 @@ type Props = {
   gameEnded?: boolean;
   allowFractional?: boolean;
   fxRate?: number; // currency → CHF rate
+  tick?: number; // optionnel : tick partagé avec le graphique (toutes les 5s)
 };
 
 export function GameTradeForm({
   gameId, symbol, price, currency, hasPosition, positionQty, avgCost,
-  myCash, feeBps, gameEnded = false, allowFractional = true, fxRate = 1,
+  myCash, feeBps, gameEnded = false, allowFractional = true, fxRate = 1, tick: tickProp,
 }: Props) {
   const [orderType, setOrderType] = useState<OrderType>("market");
   const [limitPrice, setLimitPrice] = useState("");
   const [qty, setQty] = useState("");
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [tick, setTick] = useState(0);
+  const [internalTick, setInternalTick] = useState(0);
+
+  const tick = tickProp ?? internalTick;
 
   const c = ccy(currency);
 
-  // Tick every 5s for dynamic order book
+  // Tick every 5s for dynamic order book (si pas fourni par le parent)
   useEffect(() => {
-    const iv = setInterval(() => setTick((t) => t + 1), 5000);
+    if (tickProp != null) return;
+    const iv = setInterval(() => setInternalTick((t) => t + 1), 5000);
     return () => clearInterval(iv);
-  }, []);
+  }, [tickProp]);
 
   // Order book
   const book = useMemo(() => {
