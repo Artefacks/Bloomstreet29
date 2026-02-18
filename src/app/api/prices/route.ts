@@ -154,13 +154,33 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Micro-oscillation affichage pour US stocks (prix plus vivants)
+  // Micro-oscillation automatique pour US stocks (sans clic refresh) — écrit en DB pour que les ordres limite se déclenchent
   const usSymbols = symbolsToFetch.filter((s) => !isSimulated(s));
+  const usToWrite: { symbol: string; price: number }[] = [];
   for (const sym of usSymbols) {
     const entry = priceMap[sym];
     if (entry && entry.price > 0) {
-      priceMap[sym] = { ...entry, price: usDisplayOscillation(entry.price, sym, now) };
+      const oscillated = usDisplayOscillation(entry.price, sym, now);
+      priceMap[sym] = { ...entry, price: oscillated };
+      usToWrite.push({ symbol: sym, price: oscillated });
     }
+  }
+  if (usToWrite.length > 0) {
+    const bgWork = async () => {
+      for (const { symbol, price } of usToWrite) {
+        await supabase.from("prices_latest").upsert(
+          { symbol, price, as_of: nowISO, source: "finnhub" },
+          { onConflict: "symbol" }
+        );
+        // Pas de price_history pour les micro-oscillations (évite de saturer les graphiques)
+      }
+      try {
+        await matchPendingOrders(supabase);
+      } catch (e) {
+        console.warn("[prices GET] order matching error:", e);
+      }
+    };
+    bgWork().catch((e) => console.warn("[prices GET] US oscillation error:", e));
   }
 
   return NextResponse.json({ prices: priceMap });
