@@ -5,12 +5,12 @@ import {
   createChart,
   CandlestickSeries,
   LineSeries,
+  TickMarkType,
   type IChartApi,
   type ISeriesApi,
   type CandlestickData,
   type LineData,
   type Time,
-  type TickMarkType,
   ColorType,
 } from "lightweight-charts";
 
@@ -115,9 +115,18 @@ export function PriceChartSingle({ symbol, displayPrice }: { symbol: string; dis
   useEffect(() => {
     if (!symbol) { setLoading(false); return; }
     setLoading(true);
+
+    // Déclencher une mise à jour des prix à l'ouverture du graphique (GET /api/prices écrit en DB)
+    fetch(`/api/prices?symbols=${encodeURIComponent(symbol)}`).catch(() => {});
+
     fetchHistory();
+    // Refetch après 2s pour récupérer le point fraîchement écrit
+    const refetchT = setTimeout(fetchHistory, 2000);
     const iv = setInterval(fetchHistory, 30_000);
-    return () => clearInterval(iv);
+    return () => {
+      clearTimeout(refetchT);
+      clearInterval(iv);
+    };
   }, [symbol, fetchHistory]);
 
   const candles = useMemo(() => groupIntoCandles(raw, config.candleMinutes), [raw, config.candleMinutes]);
