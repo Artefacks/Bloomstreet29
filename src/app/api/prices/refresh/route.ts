@@ -12,6 +12,7 @@ type Inst = {
   name: string | null;
   quote_symbol: string | null;
   seed_price: number | null;
+  exchange_suffix: string | null;
 };
 
 /**
@@ -41,10 +42,10 @@ export async function POST(request: NextRequest) {
   let instruments: Inst[] | null = null;
   let instErr = null;
 
-  const res1 = await supabase.from("instruments").select("id, symbol, name, quote_symbol, seed_price").limit(200);
-  if (res1.error && /seed_price|column/.test(res1.error.message ?? "")) {
+  const res1 = await supabase.from("instruments").select("id, symbol, name, quote_symbol, seed_price, exchange_suffix").limit(200);
+  if (res1.error && /seed_price|exchange_suffix|column/.test(res1.error.message ?? "")) {
     const res2 = await supabase.from("instruments").select("id, symbol, name, quote_symbol").limit(200);
-    instruments = (res2.data ?? []).map((i) => ({ ...i, seed_price: null }));
+    instruments = (res2.data ?? []).map((i) => ({ ...i, seed_price: null, exchange_suffix: null }));
     instErr = res2.error;
   } else {
     instruments = res1.data;
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
     const lastPrice = priceMap.get(inst.symbol);
     if (lastPrice == null || lastPrice <= 0) continue;
     const seedPrice = inst.seed_price ? Number(inst.seed_price) : undefined;
-    const newPrice = simulatePrice(lastPrice, inst.symbol, now, seedPrice);
+    const newPrice = simulatePrice(lastPrice, inst.symbol, now, seedPrice, inst.exchange_suffix);
 
     const { error } = await supabase.from("prices_latest").upsert(
       { symbol: inst.symbol, price: newPrice, as_of: nowISO, source: "sim" },

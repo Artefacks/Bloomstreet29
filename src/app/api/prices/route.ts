@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isSimulated, simulatePriceForward } from "@/lib/price-sim";
+import { getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
 
 /** Micro-oscillation affichage pour US stocks (±0.05%) — prix plus vivants entre les refresh */
 function usDisplayOscillation(price: number, symbol: string, now: number): number {
@@ -77,17 +78,19 @@ export async function GET(request: NextRequest) {
   const simSymbols = symbolsToFetch.filter((s) => isSimulated(s));
   const seedMap = new Map<string, number>();
 
+  const exchangeSuffixMap = new Map<string, string | null>();
   if (simSymbols.length > 0) {
     try {
       const { data: instData } = await supabase
         .from("instruments")
-        .select("symbol, seed_price")
+        .select("symbol, seed_price, exchange_suffix")
         .in("symbol", simSymbols);
       instData?.forEach((i) => {
         if (i.seed_price) seedMap.set(i.symbol, Number(i.seed_price));
+        if ("exchange_suffix" in i) exchangeSuffixMap.set(i.symbol, i.exchange_suffix ?? null);
       });
     } catch {
-      // seed_price column might not exist yet
+      // seed_price / exchange_suffix column might not exist yet
     }
   }
 
@@ -111,7 +114,8 @@ export async function GET(request: NextRequest) {
     }
 
     const seedPrice = seedMap.get(symbol);
-    const newPrice = simulatePriceForward(last.price, symbol, lastMs, now, seedPrice);
+    const exchangeSuffix = exchangeSuffixMap.get(symbol);
+    const newPrice = simulatePriceForward(last.price, symbol, lastMs, now, seedPrice, exchangeSuffix);
 
     priceMap[symbol] = { price: newPrice, as_of: nowISO };
     toWrite.push({ symbol, price: newPrice });
@@ -154,15 +158,19 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Micro-oscillation automatique pour US stocks (sans clic refresh) — écrit en DB pour que les ordres limite se déclenchent
+  // Micro-oscillation automatique pour US stocks — uniquement quand le marché est ouvert
   const usSymbols = symbolsToFetch.filter((s) => !isSimulated(s));
   const usToWrite: { symbol: string; price: number }[] = [];
   for (const sym of usSymbols) {
     const entry = priceMap[sym];
     if (entry && entry.price > 0) {
-      const oscillated = usDisplayOscillation(entry.price, sym, now);
-      priceMap[sym] = { ...entry, price: oscillated };
-      usToWrite.push({ symbol: sym, price: oscillated });
+      const exchange = getExchangeForSymbol(sym);
+      const marketOpen = isMarketOpen(exchange).open;
+      if (marketOpen) {
+        const oscillated = usDisplayOscillation(entry.price, sym, now);
+        priceMap[sym] = { ...entry, price: oscillated };
+        usToWrite.push({ symbol: sym, price: oscillated });
+      }
     }
   }
   if (usToWrite.length > 0) {

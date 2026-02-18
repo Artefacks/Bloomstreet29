@@ -383,12 +383,15 @@ function DetailPanel({
     return () => clearInterval(iv);
   }, []);
 
-  const basePrice = inst.price ?? 0;
-  const livePrice = basePrice > 0 ? tickOscillation(basePrice, inst.symbol, tick) : null;
-
-  const sector = getSectorForSymbol(inst.symbol);
   const exchange = getExchangeForSymbol(inst.symbol);
   const marketStatus = isMarketOpen(exchange);
+  const basePrice = inst.price ?? 0;
+  // Oscillation uniquement quand le marché est ouvert
+  const livePrice = basePrice > 0 && marketStatus.open
+    ? tickOscillation(basePrice, inst.symbol, tick)
+    : basePrice > 0 ? basePrice : null;
+
+  const sector = getSectorForSymbol(inst.symbol);
 
   return (
     <div className="border border-slate-200 rounded-xl bg-white p-4 space-y-4 shadow-sm">

@@ -151,7 +151,7 @@ export type Exchange = {
 
 export const EXCHANGES: Exchange[] = [
   { suffix: "", name: "NYSE / NASDAQ", flag: "🇺🇸", timezone: "America/New_York", openHour: 9, openMinute: 30, closeHour: 16, closeMinute: 0, weekdays: [1,2,3,4,5] },
-  { suffix: ".SW", name: "SIX Swiss", flag: "🇨🇭", timezone: "Europe/Zurich", openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 30, weekdays: [1,2,3,4,5] },
+  { suffix: ".SW", name: "SIX Swiss", flag: "🇨🇭", timezone: "Europe/Zurich", openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 0, weekdays: [1,2,3,4,5] },
   { suffix: ".PA", name: "Euronext Paris", flag: "🇫🇷", timezone: "Europe/Paris", openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 30, weekdays: [1,2,3,4,5] },
   { suffix: ".DE", name: "XETRA", flag: "🇩🇪", timezone: "Europe/Berlin", openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 30, weekdays: [1,2,3,4,5] },
   { suffix: ".AS", name: "Euronext Amsterdam", flag: "🇳🇱", timezone: "Europe/Amsterdam", openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 30, weekdays: [1,2,3,4,5] },
@@ -167,6 +167,11 @@ export function getExchangeForSymbol(symbol: string): Exchange {
     return EXCHANGES[0]; // US
   }
   const suffix = symbol.substring(dotIdx);
+  return getExchangeBySuffix(suffix);
+}
+
+/** Retourne l'exchange pour un suffixe de bourse ("" = US, ".SW" = Suisse, etc.). */
+export function getExchangeBySuffix(suffix: string): Exchange {
   return EXCHANGES.find((e) => e.suffix === suffix) ?? EXCHANGES[0];
 }
 
@@ -216,4 +221,30 @@ export function isMarketOpen(exchange: Exchange): { open: boolean; nextEvent: st
   }
 
   return { open: isOpen, nextEvent };
+}
+
+/**
+ * Check if an exchange was open at a specific timestamp (for simulation).
+ */
+export function isMarketOpenAt(exchange: Exchange, timestampMs: number): boolean {
+  const date = new Date(timestampMs);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: exchange.timezone,
+    hour: "numeric", minute: "numeric", hour12: false,
+    weekday: "short",
+  });
+  const parts = formatter.formatToParts(date);
+  const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+
+  const dayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+  const dayNum = dayMap[weekday] ?? 0;
+
+  const isWeekday = exchange.weekdays.includes(dayNum);
+  const timeMinutes = hour * 60 + minute;
+  const openMinutes = exchange.openHour * 60 + exchange.openMinute;
+  const closeMinutes = exchange.closeHour * 60 + exchange.closeMinute;
+
+  return isWeekday && timeMinutes >= openMinutes && timeMinutes < closeMinutes;
 }

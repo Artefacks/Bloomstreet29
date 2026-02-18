@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchQuote, batchProcess } from "@/lib/finnhub";
 import { isSimulated, simulatePrice } from "@/lib/price-sim";
+import { getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
 
 /** Micro-oscillation déterministe pour les actions US (±0.08%) — simule les petits mouvements réels, aide les ordres limite */
 function usPriceOscillation(price: number, symbol: string, timestampMs: number): number {
@@ -25,6 +26,7 @@ type Inst = {
   name: string | null;
   quote_symbol: string | null;
   seed_price: number | null;
+  exchange_suffix: string | null;
 };
 
 /**
@@ -53,10 +55,10 @@ export async function POST(request: NextRequest) {
   let instruments: Inst[] | null = null;
   let instErr = null;
 
-  const res1 = await supabase.from("instruments").select("id, symbol, name, quote_symbol, seed_price").limit(200);
-  if (res1.error && /seed_price|column/.test(res1.error.message ?? "")) {
+  const res1 = await supabase.from("instruments").select("id, symbol, name, quote_symbol, seed_price, exchange_suffix").limit(200);
+  if (res1.error && /seed_price|exchange_suffix|column/.test(res1.error.message ?? "")) {
     const res2 = await supabase.from("instruments").select("id, symbol, name, quote_symbol").limit(200);
-    instruments = (res2.data ?? []).map((i) => ({ ...i, seed_price: null }));
+    instruments = (res2.data ?? []).map((i) => ({ ...i, seed_price: null, exchange_suffix: null }));
     instErr = res2.error;
   } else {
     instruments = res1.data;
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
     if (lastPrice == null || lastPrice <= 0) continue; // no seed price yet → skip
 
     const seedPrice = inst.seed_price ? Number(inst.seed_price) : undefined;
-    const newPrice = simulatePrice(lastPrice, inst.symbol, now, seedPrice);
+    const newPrice = simulatePrice(lastPrice, inst.symbol, now, seedPrice, inst.exchange_suffix);
 
     const { error: upsertErr } = await supabase.from("prices_latest").upsert(
       { symbol: inst.symbol, price: newPrice, as_of: nowISO, source: "sim" },
@@ -116,7 +118,10 @@ export async function POST(request: NextRequest) {
       const sym = inst.quote_symbol ?? inst.symbol;
       const rawPrice = await fetchQuote(finnhubKey, sym);
       if (rawPrice == null) return;
-      const price = usPriceOscillation(rawPrice, inst.symbol, now);
+      const exchange = getExchangeForSymbol(inst.symbol);
+      const price = isMarketOpen(exchange).open
+        ? usPriceOscillation(rawPrice, inst.symbol, now)
+        : rawPrice; // Marché fermé : pas d'oscillation
 
       const { error: upsertErr } = await supabase.from("prices_latest").upsert(
         { symbol: inst.symbol, price, as_of: nowISO, source: "finnhub" },

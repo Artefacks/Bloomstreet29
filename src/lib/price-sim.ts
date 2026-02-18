@@ -13,7 +13,7 @@
  *  - Mean-reversion to seed price over days
  */
 
-import { getSectorId } from "./sectors";
+import { getSectorId, getExchangeForSymbol, getExchangeBySuffix, isMarketOpenAt } from "./sectors";
 
 /* ──── Deterministic PRNG (mulberry32) ──── */
 
@@ -140,8 +140,14 @@ export function simulatePrice(
   lastPrice: number,
   symbol: string,
   timestamp: number,
-  seedPrice?: number
+  seedPrice?: number,
+  exchangeSuffix?: string | null
 ): number {
+  const exchange = exchangeSuffix != null ? getExchangeBySuffix(exchangeSuffix) : getExchangeForSymbol(symbol);
+  if (!isMarketOpenAt(exchange, timestamp)) {
+    return lastPrice; // Marché fermé : prix figé
+  }
+
   const minute = Math.floor(timestamp / 60_000);
   const seed = hashStr(`${symbol}:${minute}`);
   const rng = mulberry32(seed);
@@ -194,19 +200,22 @@ export function simulatePriceForward(
   symbol: string,
   fromTimestampMs: number,
   toTimestampMs: number,
-  seedPrice?: number
+  seedPrice?: number,
+  exchangeSuffix?: string | null
 ): number {
   const fromMinute = Math.floor(fromTimestampMs / 60_000);
   const toMinute = Math.floor(toTimestampMs / 60_000);
 
   if (toMinute <= fromMinute) return startPrice;
 
+  const exchange = exchangeSuffix != null ? getExchangeBySuffix(exchangeSuffix) : getExchangeForSymbol(symbol);
   const steps = Math.min(toMinute - fromMinute, 480);
   let price = startPrice;
 
   for (let i = 1; i <= steps; i++) {
     const tickMs = (fromMinute + i) * 60_000;
-    price = simulatePrice(price, symbol, tickMs, seedPrice);
+    if (!isMarketOpenAt(exchange, tickMs)) continue; // Marché fermé : pas de mouvement
+    price = simulatePrice(price, symbol, tickMs, seedPrice, exchangeSuffix);
   }
 
   return price;
