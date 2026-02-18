@@ -51,8 +51,20 @@ export function LivePrices({
       const data = await res.json();
       if (res.ok && data.ok) {
         console.log("[LivePrices] Refresh:", data);
-        // Immediately re-fetch prices after refresh
+        // Feedback visible : X prix mis à jour (Y US, Z simulés)
+        const msg = data.finnhub_configured
+          ? `${data.updated} prix mis à jour (${data.real} US, ${data.simulated} simulés)`
+          : data.simulated > 0
+            ? `${data.simulated} prix simulés mis à jour. Ajoute FINNHUB_API_KEY sur Vercel + redéploie pour les prix US.`
+            : "Aucun prix à mettre à jour. Vérifie /api/prices/debug";
+        setLastUpdate(new Date());
         await fetchPrices();
+        // Toast de feedback
+        const toast = document.createElement("div");
+        toast.textContent = msg;
+        toast.className = "fixed bottom-4 right-4 bg-teal-600 text-white text-xs px-3 py-2 rounded shadow z-50";
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
       } else {
         console.error("[LivePrices] Refresh failed:", data);
         const missing = data.missing?.length ? ` (manquant: ${data.missing.join(", ")})` : "";
@@ -89,6 +101,15 @@ export function LivePrices({
       >
         {isRefreshing ? "..." : "Rafraîchir"}
       </button>
+      <a
+        href="/api/prices/debug"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="px-2 py-1 text-xs text-slate-400 hover:text-slate-600"
+        title="Diagnostic des prix"
+      >
+        ?
+      </a>
     </div>
   );
 }

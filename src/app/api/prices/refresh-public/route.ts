@@ -125,6 +125,8 @@ export async function POST(request: NextRequest) {
     updated: updatedReal + updatedSim,
     real: updatedReal,
     simulated: updatedSim,
+    us_total: usStocks.length,
+    finnhub_configured: !!finnhubKey,
     total: list.length,
   });
   } catch (err) {
