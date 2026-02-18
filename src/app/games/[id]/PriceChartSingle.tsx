@@ -10,6 +10,7 @@ import {
   type CandlestickData,
   type LineData,
   type Time,
+  type TickMarkType,
   ColorType,
 } from "lightweight-charts";
 
@@ -51,6 +52,26 @@ function groupIntoCandles(points: RawPoint[], candleMinutes: number): Candlestic
     });
   }
   return candles;
+}
+
+/** Formate le timestamp en heure locale (évite l'affichage UTC -1h) */
+function formatTimeLocal(time: Time): string {
+  const secs = typeof time === "number" ? time : null;
+  if (secs == null) return "";
+  const d = new Date(secs * 1000);
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatTickMarkLocal(time: Time, tickMarkType: TickMarkType): string {
+  const secs = typeof time === "number" ? time : null;
+  if (secs == null) return "";
+  const d = new Date(secs * 1000);
+  switch (tickMarkType) {
+    case TickMarkType.Year: return d.toLocaleDateString("fr-FR", { year: "numeric" });
+    case TickMarkType.Month: return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+    case TickMarkType.DayOfMonth: return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+    default: return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }
 }
 
 function toLineData(points: RawPoint[], candleMinutes: number): LineData[] {
@@ -147,7 +168,16 @@ export function PriceChartSingle({ symbol, displayPrice }: { symbol: string; dis
         horzLine: { color: "#cbd5e1", width: 1, labelBackgroundColor: "#334155" },
       },
       rightPriceScale: { borderColor: "#e2e8f0" },
-      timeScale: { borderColor: "#e2e8f0", timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderColor: "#e2e8f0",
+        timeVisible: true,
+        secondsVisible: false,
+        tickMarkFormatter: (t, type) => formatTickMarkLocal(t, type),
+      },
+      localization: {
+        locale: "fr-FR",
+        timeFormatter: (t) => formatTimeLocal(t as Time),
+      },
     });
 
     if (mode === "candle") {
