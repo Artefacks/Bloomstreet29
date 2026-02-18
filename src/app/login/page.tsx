@@ -16,6 +16,7 @@ function LoginForm() {
       "URL de redirection non autorisée. Vérifie Supabase → Authentication → URL Configuration.",
   };
 
+  const details = searchParams.get("details");
   const errorMessage = error
     ? errorMessages[error] ?? `Erreur : ${error}`
     : null;
@@ -36,6 +37,9 @@ function LoginForm() {
         {errorMessage && (
           <div className="mb-4 p-3 bg-red-50 text-red-800 rounded-lg text-sm">
             {errorMessage}
+            {details && (
+              <p className="mt-2 text-xs opacity-80 break-all">{details}</p>
+            )}
           </div>
         )}
 

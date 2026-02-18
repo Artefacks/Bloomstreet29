@@ -16,7 +16,10 @@ async function handleLogin(request: NextRequest) {
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo },
+    options: {
+      redirectTo,
+      scopes: "openid email profile",
+    },
   });
 
   if (error || !data?.url) {
