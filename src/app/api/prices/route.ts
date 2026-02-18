@@ -1,0 +1,148 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { isSimulated, simulatePriceForward } from "@/lib/price-sim";
+import { matchPendingOrders } from "@/lib/order-matching";
+
+/**
+ * GET /api/prices?symbols=AAPL,NESN.SW,...
+ *
+ * Returns current prices:
+ *  - US stocks: last known from prices_latest (real Finnhub data)
+ *  - Simulated stocks: computed LIVE by fast-forwarding from last recorded
+ *    price to current minute. Prices move every minute automatically.
+ *
+ * Also writes the new simulated price back to prices_latest + price_history
+ * so charts build up over time.
+ */
+export async function GET(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json({ prices: {} });
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  const url = new URL(request.url);
+  const symbolsParam = url.searchParams.get("symbols");
+  const symbols = symbolsParam
+    ? symbolsParam.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
+    : null;
+
+  // Load all instruments if no filter
+  let symbolsToFetch: string[];
+  if (symbols && symbols.length > 0) {
+    symbolsToFetch = symbols;
+  } else {
+    const { data: instruments } = await supabase
+      .from("instruments")
+      .select("symbol")
+      .limit(200);
+    symbolsToFetch = instruments?.map((i) => i.symbol) ?? [];
+  }
+
+  if (symbolsToFetch.length === 0) {
+    return NextResponse.json({ prices: {} });
+  }
+
+  // Load latest prices
+  const { data: prices } = await supabase
+    .from("prices_latest")
+    .select("symbol, price, as_of")
+    .in("symbol", symbolsToFetch);
+
+  const priceMap: Record<string, { price: number; as_of: string }> = {};
+  const rawMap = new Map<string, { price: number; as_of: string }>();
+
+  prices?.forEach((p) => {
+    const entry = { price: Number(p.price), as_of: p.as_of };
+    rawMap.set(p.symbol, entry);
+    priceMap[p.symbol] = entry;
+  });
+
+  // Load seed_prices for simulated stocks
+  const simSymbols = symbolsToFetch.filter((s) => isSimulated(s));
+  const seedMap = new Map<string, number>();
+
+  if (simSymbols.length > 0) {
+    try {
+      const { data: instData } = await supabase
+        .from("instruments")
+        .select("symbol, seed_price")
+        .in("symbol", simSymbols);
+      instData?.forEach((i) => {
+        if (i.seed_price) seedMap.set(i.symbol, Number(i.seed_price));
+      });
+    } catch {
+      // seed_price column might not exist yet
+    }
+  }
+
+  // ─── Simulate forward for international stocks ───
+  const now = Date.now();
+  const nowISO = new Date(now).toISOString();
+  const toWrite: { symbol: string; price: number }[] = [];
+
+  for (const symbol of simSymbols) {
+    const last = rawMap.get(symbol);
+    if (!last || last.price <= 0) continue;
+
+    const lastMs = new Date(last.as_of).getTime();
+    const lastMinute = Math.floor(lastMs / 60_000);
+    const nowMinute = Math.floor(now / 60_000);
+
+    // Only simulate if at least 1 minute has passed
+    if (nowMinute <= lastMinute) {
+      // Same minute — keep existing price
+      continue;
+    }
+
+    const seedPrice = seedMap.get(symbol);
+    const newPrice = simulatePriceForward(last.price, symbol, lastMs, now, seedPrice);
+
+    priceMap[symbol] = { price: newPrice, as_of: nowISO };
+    toWrite.push({ symbol, price: newPrice });
+  }
+
+  // Write updated simulated prices + match pending orders (fire-and-forget)
+  if (toWrite.length > 0) {
+    const bgWork = async () => {
+      for (const { symbol, price } of toWrite) {
+        await supabase.from("prices_latest").upsert(
+          { symbol, price, as_of: nowISO, source: "sim" },
+          { onConflict: "symbol" }
+        );
+        await supabase.from("price_history").insert({ symbol, price, as_of: nowISO });
+      }
+      // After prices are written, check if any limit orders can be filled
+      try {
+        await matchPendingOrders(supabase);
+      } catch (e) {
+        console.warn("[prices GET] order matching error:", e);
+      }
+    };
+    bgWork().catch((e) => console.warn("[prices GET] background error:", e));
+  }
+
+  // Fallback for symbols with no price at all
+  const missing = symbolsToFetch.filter((s) => !priceMap[s]);
+  if (missing.length > 0) {
+    const { data: historyRows } = await supabase
+      .from("price_history")
+      .select("symbol, price, as_of")
+      .in("symbol", missing)
+      .order("as_of", { ascending: false });
+    const seen = new Set<string>();
+    historyRows?.forEach((r) => {
+      if (!seen.has(r.symbol)) {
+        seen.add(r.symbol);
+        priceMap[r.symbol] = { price: Number(r.price), as_of: r.as_of };
+      }
+    });
+  }
+
+  return NextResponse.json({ prices: priceMap });
+}
