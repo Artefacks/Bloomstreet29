@@ -54,8 +54,9 @@ export function LivePrices({
         // Immediately re-fetch prices after refresh
         await fetchPrices();
       } else {
-        console.error("[LivePrices] Refresh failed:", data.error);
-        alert(`Erreur: ${data.error || "Erreur inconnue"}`);
+        console.error("[LivePrices] Refresh failed:", data);
+        const missing = data.missing?.length ? ` (manquant: ${data.missing.join(", ")})` : "";
+        alert(`Erreur: ${data.error || "Erreur inconnue"}${missing}`);
       }
     } catch (error) {
       console.error("[LivePrices] refresh error:", error);

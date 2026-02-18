@@ -23,15 +23,19 @@ type Inst = {
  *  - International stocks → deterministic simulation from last known price
  */
 export async function POST(request: NextRequest) {
-  const finnhubKey = process.env.FINNHUB_API_KEY;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    const finnhubKey = process.env.FINNHUB_API_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!finnhubKey || !supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json({ ok: false, error: "Configuration manquante" }, { status: 500 });
-  }
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { ok: false, error: "Configuration manquante", missing: [!supabaseUrl && "NEXT_PUBLIC_SUPABASE_URL", !serviceRoleKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean) },
+        { status: 500 }
+      );
+    }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
   // Load instruments (try with seed_price, fallback without if column missing)
   let instruments: Inst[] | null = null;
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ─── 2. Fetch US stocks from Finnhub (batched) ───
-  const usStocks = list.filter((i) => !isSimulated(i.symbol));
+  const usStocks = finnhubKey ? list.filter((i) => !isSimulated(i.symbol)) : [];
 
   const processUS = async (inst: Inst) => {
     try {
@@ -123,4 +127,9 @@ export async function POST(request: NextRequest) {
     simulated: updatedSim,
     total: list.length,
   });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[prices/refresh-public]", err);
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+  }
 }

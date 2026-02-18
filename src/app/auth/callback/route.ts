@@ -22,11 +22,9 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    const params = new URLSearchParams({
-      error: error.code ?? "auth_failed",
-      details: error.message,
-    });
-    return NextResponse.redirect(new URL(`/login?${params.toString()}`, origin));
+    return NextResponse.redirect(
+      new URL(`/login?error=${encodeURIComponent(error.code ?? "auth_failed")}`, origin)
+    );
   }
 
   return response;
