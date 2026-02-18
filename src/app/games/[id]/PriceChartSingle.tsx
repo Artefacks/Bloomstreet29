@@ -67,11 +67,21 @@ function toLineData(points: RawPoint[], candleMinutes: number): LineData[] {
     .map(([time, value]) => ({ time: time as Time, value }));
 }
 
+/** Micro-oscillation client-side (±0.06%) — pure affichage, pas stocké, visible chaque seconde */
+function tickOscillation(base: number, symbol: string, sec: number): number {
+  let h = 0;
+  for (let i = 0; i < symbol.length; i++) h = ((h << 5) - h + symbol.charCodeAt(i)) | 0;
+  const seed = (h ^ sec) >>> 0;
+  const r = ((seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff * 2 - 1;
+  return Math.round(base * (1 + r * 0.0006) * 100) / 100;
+}
+
 export function PriceChartSingle({ symbol }: { symbol: string }) {
   const [raw, setRaw] = useState<RawPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<TimeRange>("4H");
   const [mode, setMode] = useState<ChartMode>("line");
+  const [livePrice, setLivePrice] = useState<number | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
@@ -114,6 +124,20 @@ export function PriceChartSingle({ symbol }: { symbol: string }) {
     return { first, last, min, max, change, changePct };
   }, [lineData]);
 
+  // Micro-oscillation affichage toutes les secondes (client-side, pas stocké)
+  useEffect(() => {
+    if (!stats?.last) return;
+    const base = stats.last;
+    const tick = () => {
+      const sec = Math.floor(Date.now() / 1000);
+      setLivePrice(tickOscillation(base, symbol, sec));
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [stats?.last, symbol]);
+
+  const displayPrice = livePrice ?? stats?.last ?? 0;
   const trend = stats ? (stats.change >= 0 ? "up" : "down") : "neutral";
 
   // Create / update chart
@@ -215,8 +239,8 @@ export function PriceChartSingle({ symbol }: { symbol: string }) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         {stats && (
           <div className="flex items-center gap-3">
-            <span className="font-mono text-lg font-semibold text-slate-800">
-              {stats.last.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="font-mono text-lg font-semibold text-slate-800 tabular-nums">
+              {displayPrice.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
             <span className={`font-mono text-sm font-medium ${stats.change >= 0 ? "text-green-600" : "text-red-600"}`}>
               {stats.change >= 0 ? "+" : ""}{stats.change.toFixed(2)} ({stats.changePct >= 0 ? "+" : ""}{stats.changePct.toFixed(2)}%)

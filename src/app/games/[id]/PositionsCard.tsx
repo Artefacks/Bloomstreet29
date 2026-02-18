@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 
 type Position = {
   symbol: string;
@@ -9,6 +10,7 @@ type Position = {
 };
 
 type Props = {
+  gameId: string;
   positions: Position[];
   symbols: string[];
   initialPrices: Record<string, number | null>;
@@ -24,7 +26,7 @@ function fmt(n: number, d = 2) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-export function PositionsCard({ positions, symbols, initialPrices, currencyMap, fxRates }: Props) {
+export function PositionsCard({ gameId, positions, symbols, initialPrices, currencyMap, fxRates }: Props) {
   const [prices, setPrices] = useState<Record<string, number | null>>(initialPrices);
   const fetchingRef = useRef(false);
 
@@ -106,7 +108,11 @@ export function PositionsCard({ positions, symbols, initialPrices, currencyMap, 
             : null;
 
           return (
-            <div key={pos.symbol} className="flex items-center justify-between py-1.5 px-1 rounded hover:bg-slate-50 transition-colors">
+            <Link
+              key={pos.symbol}
+              href={`/games/${gameId}?symbol=${encodeURIComponent(pos.symbol)}`}
+              className="flex items-center justify-between py-1.5 px-1 rounded hover:bg-teal-50 transition-colors block"
+            >
               {/* Left: symbol + qty + cost */}
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -133,7 +139,7 @@ export function PositionsCard({ positions, symbols, initialPrices, currencyMap, 
                   <div className="text-[11px] text-slate-300">—</div>
                 )}
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>

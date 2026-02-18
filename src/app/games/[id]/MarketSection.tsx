@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { GameTradeForm } from "./GameTradeForm";
 import { LivePrices } from "./LivePrices";
 import { PriceChartSingle } from "./PriceChartSingle";
@@ -43,6 +44,7 @@ export function MarketSection({
   feeBps,
   gameEnded,
   allowFractional,
+  symbolFromUrl,
 }: {
   gameId: string;
   instruments: Instrument[];
@@ -51,12 +53,33 @@ export function MarketSection({
   feeBps: number;
   gameEnded: boolean;
   allowFractional: boolean;
+  symbolFromUrl?: string | null;
 }) {
   const [instruments, setInstruments] = useState<Instrument[]>(initialInstruments);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("symbol");
   const [sortAsc, setSortAsc] = useState(true);
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(symbolFromUrl ?? null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const detailPanelRef = useRef<HTMLDivElement>(null);
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedSymbol(null);
+    if (symbolFromUrl) router.replace(pathname);
+  }, [symbolFromUrl, router, pathname]);
+
+  useEffect(() => {
+    if (symbolFromUrl) {
+      setSelectedSymbol(symbolFromUrl);
+    }
+  }, [symbolFromUrl]);
+
+  useEffect(() => {
+    if (selectedSymbol && symbolFromUrl === selectedSymbol && detailPanelRef.current) {
+      detailPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedSymbol, symbolFromUrl]);
   const [activeSector, setActiveSector] = useState<string | null>(null);
 
   // Price tracking: two refs
@@ -322,6 +345,7 @@ export function MarketSection({
 
       {/* Detail panel */}
       {selectedSymbol && selectedInstrument && (
+        <div ref={detailPanelRef}>
         <DetailPanel
           gameId={gameId}
           inst={selectedInstrument}
@@ -330,8 +354,9 @@ export function MarketSection({
           feeBps={feeBps}
           gameEnded={gameEnded}
           allowFractional={allowFractional}
-          onClose={() => setSelectedSymbol(null)}
+          onClose={handleCloseDetail}
         />
+        </div>
       )}
     </div>
   );

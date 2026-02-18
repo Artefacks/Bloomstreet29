@@ -47,7 +47,7 @@ export default async function GamePage({
     );
   }
 
-  const urlParams = await searchParams;
+  const urlParams = await searchParams as { success?: string; error?: string; symbol?: string };
   const success = urlParams.success;
   const error = urlParams.error;
   const endDate = state.game.ends_at
@@ -109,7 +109,7 @@ export default async function GamePage({
         )}
 
         {/* ═══ TOP: Market section (full width, the star of the show) ═══ */}
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-5" id="market-section">
           <MarketSection
             gameId={gameId}
             instruments={state.instruments}
@@ -118,6 +118,7 @@ export default async function GamePage({
             feeBps={state.game.fee_bps}
             gameEnded={state.game.status === "finished"}
             allowFractional={state.game.allow_fractional}
+            symbolFromUrl={urlParams.symbol}
           />
         </section>
 
@@ -222,6 +223,7 @@ export default async function GamePage({
                 Positions ({state.myPositions.length})
               </h2>
               <PositionsCard
+                gameId={gameId}
                 positions={state.myPositions}
                 symbols={state.myPositions.map((p) => p.symbol)}
                 initialPrices={Object.fromEntries(
@@ -247,7 +249,12 @@ export default async function GamePage({
                         <span className={`text-[10px] font-bold ${o.side === "buy" ? "text-green-600" : "text-red-600"}`}>
                           {o.side === "buy" ? "ACH" : "VEN"}
                         </span>
-                        <span className="font-mono font-medium text-slate-800">{o.symbol}</span>
+                        <Link
+                          href={`/games/${gameId}?symbol=${encodeURIComponent(o.symbol)}`}
+                          className="font-mono font-medium text-slate-800 hover:text-teal-600 hover:underline"
+                        >
+                          {o.symbol}
+                        </Link>
                         <span className="text-slate-400 text-xs">x{o.qty}</span>
                       </div>
                       <div className="flex items-center gap-2">
