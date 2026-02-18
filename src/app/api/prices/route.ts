@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isSimulated, simulatePriceForward } from "@/lib/price-sim";
+
+/** Micro-oscillation affichage pour US stocks (±0.05%) — prix plus vivants entre les refresh */
+function usDisplayOscillation(price: number, symbol: string, now: number): number {
+  const sec10 = Math.floor(now / 10_000); // change toutes les 10s
+  let h = 0;
+  for (let i = 0; i < symbol.length; i++) h = ((h << 5) - h + symbol.charCodeAt(i)) | 0;
+  const seed = (h ^ sec10) >>> 0;
+  const r = ((seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff * 2 - 1;
+  return Math.round(price * (1 + r * 0.0005) * 10000) / 10000;
+}
 import { matchPendingOrders } from "@/lib/order-matching";
 
 /**
@@ -142,6 +152,15 @@ export async function GET(request: NextRequest) {
         priceMap[r.symbol] = { price: Number(r.price), as_of: r.as_of };
       }
     });
+  }
+
+  // Micro-oscillation affichage pour US stocks (prix plus vivants)
+  const usSymbols = symbolsToFetch.filter((s) => !isSimulated(s));
+  for (const sym of usSymbols) {
+    const entry = priceMap[sym];
+    if (entry && entry.price > 0) {
+      priceMap[sym] = { ...entry, price: usDisplayOscillation(entry.price, sym, now) };
+    }
   }
 
   return NextResponse.json({ prices: priceMap });

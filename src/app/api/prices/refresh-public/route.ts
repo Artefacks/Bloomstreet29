@@ -3,6 +3,18 @@ import { createClient } from "@supabase/supabase-js";
 import { fetchQuote, batchProcess } from "@/lib/finnhub";
 import { isSimulated, simulatePrice } from "@/lib/price-sim";
 
+/** Micro-oscillation déterministe pour les actions US (±0.08%) — simule les petits mouvements réels, aide les ordres limite */
+function usPriceOscillation(price: number, symbol: string, timestampMs: number): number {
+  const minute = Math.floor(timestampMs / 60_000);
+  let h = 0;
+  for (let i = 0; i < symbol.length; i++) h = ((h << 5) - h + symbol.charCodeAt(i)) | 0;
+  const seed = (h ^ minute) >>> 0;
+  const t = (seed * 1103515245 + 12345) & 0x7fffffff;
+  const r = (t / 0x7fffffff) * 2 - 1; // -1 à 1
+  const noise = r * 0.0008; // ±0.08% (~10 ct sur Apple à 120$)
+  return Math.max(0.01, Math.round(price * (1 + noise) * 10000) / 10000);
+}
+
 const MAX_DURATION_MS = 50_000;
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 5200; // ~57 Finnhub calls/min
@@ -102,8 +114,9 @@ export async function POST(request: NextRequest) {
   const processUS = async (inst: Inst) => {
     try {
       const sym = inst.quote_symbol ?? inst.symbol;
-      const price = await fetchQuote(finnhubKey, sym);
-      if (price == null) return;
+      const rawPrice = await fetchQuote(finnhubKey, sym);
+      if (rawPrice == null) return;
+      const price = usPriceOscillation(rawPrice, inst.symbol, now);
 
       const { error: upsertErr } = await supabase.from("prices_latest").upsert(
         { symbol: inst.symbol, price, as_of: nowISO, source: "finnhub" },

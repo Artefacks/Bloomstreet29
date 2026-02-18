@@ -163,9 +163,28 @@ export async function getGameState(
     positionMap.set(p.user_id, list);
   });
 
+  // Reserved cash from open buy limit orders (ne compte pas comme P&L négatif)
+  const { data: allPending } = await supabase
+    .from("pending_orders")
+    .select("user_id, symbol, side, qty, limit_price")
+    .eq("game_id", gameId)
+    .eq("status", "open");
+  const reservedByUser = new Map<string, number>();
+  (allPending ?? []).forEach((o) => {
+    if (o.side !== "buy") return;
+    const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
+    const reserved = Number(o.limit_price) * Number(o.qty) * fxRate;
+    reservedByUser.set(o.user_id, (reservedByUser.get(o.user_id) ?? 0) + reserved);
+  });
+
+  const feeBps = Number(game.fee_bps ?? 10);
   const leaderboard = (players ?? []).map((p) => {
     const posList = positionMap.get(p.user_id) ?? [];
-    let value = Number(p.cash); // cash is already in CHF
+    let value = Number(p.cash); // cash déjà déduit des réserves
+    // Réintégrer la réserve des ordres limite d'achat pour le calcul P&L (comme les apps bancaires)
+    const reserved = reservedByUser.get(p.user_id) ?? 0;
+    const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
+    value += reserved + reserveFee;
     posList.forEach(({ symbol, qty }) => {
       const pr = priceMap.get(symbol);
       if (pr != null) {
