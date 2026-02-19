@@ -119,6 +119,7 @@ export default async function GamePage({
             gameEnded={state.game.status === "finished"}
             allowFractional={state.game.allow_fractional}
             symbolFromUrl={urlParams.symbol}
+            pendingOrders={state.pendingOrders}
           />
         </section>
 

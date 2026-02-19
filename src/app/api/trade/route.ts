@@ -48,11 +48,13 @@ function redirectToGame(
   request: NextRequest,
   gameId: string,
   success?: string,
-  error?: string
+  error?: string,
+  symbol?: string
 ) {
   const url = new URL(`/games/${gameId}`, request.url);
   if (success) url.searchParams.set("success", success);
   if (error) url.searchParams.set("error", error);
+  if (symbol) url.searchParams.set("symbol", symbol);
   return NextResponse.redirect(url);
 }
 
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
   const limitPrice = limitPriceRaw != null ? Number(limitPriceRaw) : null;
 
   if (!gameId || !symbol || qty <= 0) {
-    if (gameId) return redirectToGame(request, gameId, undefined, "Paramètres invalides.");
+    if (gameId) return redirectToGame(request, gameId, undefined, "Paramètres invalides.", symbol || undefined);
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -101,7 +103,7 @@ export async function POST(request: NextRequest) {
     .eq("user_id", user.id)
     .single();
 
-  if (!player) return redirectToGame(request, gameId, undefined, "Pas membre de cette partie.");
+  if (!player) return redirectToGame(request, gameId, undefined, "Pas membre de cette partie.", symbol);
 
   // Load game settings
   const { data: gameRow } = await supabase
@@ -110,12 +112,12 @@ export async function POST(request: NextRequest) {
     .eq("id", gameId)
     .single();
 
-  if (!gameRow) return redirectToGame(request, gameId, undefined, "Partie introuvable.");
+  if (!gameRow) return redirectToGame(request, gameId, undefined, "Partie introuvable.", symbol);
 
   const endsAt = gameRow.ends_at ?? null;
   const effectiveStatus = endsAt && new Date(endsAt) < new Date() ? "finished" : (gameRow.status ?? "active");
   if (effectiveStatus !== "active") {
-    return redirectToGame(request, gameId, undefined, "Partie terminée.");
+    return redirectToGame(request, gameId, undefined, "Partie terminée.", symbol);
   }
 
   const feeBps = Number(gameRow.fee_bps ?? 10);
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
   let qtyFinal = qty;
   if (!allowFractional) {
     qtyFinal = Math.floor(qty);
-    if (qtyFinal <= 0) return redirectToGame(request, gameId, undefined, "Quantité entière requise.");
+    if (qtyFinal <= 0) return redirectToGame(request, gameId, undefined, "Quantité entière requise.", symbol);
   }
 
   // Load market price
@@ -134,7 +136,7 @@ export async function POST(request: NextRequest) {
     .eq("symbol", symbol)
     .single();
 
-  if (!priceRow) return redirectToGame(request, gameId, undefined, `Prix absent pour ${symbol}.`);
+  if (!priceRow) return redirectToGame(request, gameId, undefined, `Prix absent pour ${symbol}.`, symbol);
 
   const marketPrice = Number(priceRow.price);
   const { bid, ask } = getBidAsk(marketPrice);
@@ -147,7 +149,7 @@ export async function POST(request: NextRequest) {
   if (orderType === "limit" && limitPrice != null && isFinite(limitPrice) && limitPrice > 0) {
     const deviation = Math.abs(limitPrice - marketPrice) / marketPrice;
     if (deviation > 0.10) {
-      return redirectToGame(request, gameId, undefined, "Prix limite trop éloigné du marché (max 10%).");
+      return redirectToGame(request, gameId, undefined, "Prix limite trop éloigné du marché (max 10%).", symbol);
     }
 
     // For buy limit: reserve the cash (limit_price * qty * fxRate + fees)
@@ -156,7 +158,7 @@ export async function POST(request: NextRequest) {
       const reserveTotalCHF = reserveTotal * fxRate;
       const reserveFee = Math.min(15, Math.round((reserveTotalCHF * feeBps) / 10000 * 100) / 100);
       if (cash < reserveTotalCHF + reserveFee) {
-        return redirectToGame(request, gameId, undefined, "Cash insuffisant pour cet ordre limite.");
+        return redirectToGame(request, gameId, undefined, "Cash insuffisant pour cet ordre limite.", symbol);
       }
       const newCash = cash - reserveTotalCHF - reserveFee;
       await supabase.from("game_players").update({ cash: newCash }).eq("id", player.id);
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
         .eq("symbol", symbol)
         .single();
       if (!pos || Number(pos.qty) < qtyFinal) {
-        return redirectToGame(request, gameId, undefined, "Position insuffisante.");
+        return redirectToGame(request, gameId, undefined, "Position insuffisante.", symbol);
       }
       // Reserve the shares (reduce position)
       const newQty = Number(pos.qty) - qtyFinal;
@@ -196,13 +198,15 @@ export async function POST(request: NextRequest) {
 
     if (insertErr) {
       console.error("[trade] pending insert:", insertErr);
-      return redirectToGame(request, gameId, undefined, "Erreur création ordre limite.");
+      return redirectToGame(request, gameId, undefined, "Erreur création ordre limite.", symbol);
     }
 
     return redirectToGame(
       request,
       gameId,
-      `Ordre limite ${side === "buy" ? "d'achat" : "de vente"} : ${qtyFinal} ${symbol} @ ${limitPrice.toFixed(2)}. En attente d'exécution.`
+      `Ordre limite ${side === "buy" ? "d'achat" : "de vente"} : ${qtyFinal} ${symbol} @ ${limitPrice.toFixed(2)}. En attente d'exécution.`,
+      undefined,
+      symbol
     );
   }
 
@@ -217,7 +221,7 @@ export async function POST(request: NextRequest) {
   if (side === "buy") {
     const totalWithFee = totalCHF + feeAmount;
     if (cash < totalWithFee) {
-      return redirectToGame(request, gameId, undefined, "Cash insuffisant (montant + frais).");
+      return redirectToGame(request, gameId, undefined, "Cash insuffisant (montant + frais).", symbol);
     }
 
     const { data: existingPos } = await supabase
@@ -250,7 +254,7 @@ export async function POST(request: NextRequest) {
 
     await recordEquitySnapshot(supabase, gameId, user.id, newCash);
     const ccyLabel = getCurrencyForSymbol(symbol);
-    return redirectToGame(request, gameId, `Achat : ${qtyFinal} ${symbol} @ ${price.toFixed(4)} ${ccyLabel} (${totalCHF.toFixed(2)} CHF, frais ${feeAmount.toFixed(2)} CHF).`);
+    return redirectToGame(request, gameId, `Achat : ${qtyFinal} ${symbol} @ ${price.toFixed(4)} ${ccyLabel} (${totalCHF.toFixed(2)} CHF, frais ${feeAmount.toFixed(2)} CHF).`, undefined, symbol);
   }
 
   // SELL market
@@ -263,7 +267,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (!pos || Number(pos.qty) < qtyFinal) {
-    return redirectToGame(request, gameId, undefined, "Position insuffisante.");
+    return redirectToGame(request, gameId, undefined, "Position insuffisante.", symbol);
   }
 
   const creditCHF = totalCHF - feeAmount;
@@ -284,5 +288,5 @@ export async function POST(request: NextRequest) {
 
   await recordEquitySnapshot(supabase, gameId, user.id, newCash);
   const ccyLabel = getCurrencyForSymbol(symbol);
-  return redirectToGame(request, gameId, `Vente : ${qtyFinal} ${symbol} @ ${price.toFixed(4)} ${ccyLabel} (${creditCHF.toFixed(2)} CHF, frais ${feeAmount.toFixed(2)} CHF).`);
+  return redirectToGame(request, gameId, `Vente : ${qtyFinal} ${symbol} @ ${price.toFixed(4)} ${ccyLabel} (${creditCHF.toFixed(2)} CHF, frais ${feeAmount.toFixed(2)} CHF).`, undefined, symbol);
 }

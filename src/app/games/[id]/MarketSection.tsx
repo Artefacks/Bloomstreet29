@@ -34,6 +34,15 @@ type Position = {
   avg_cost: number;
 };
 
+type PendingOrder = {
+  id: string;
+  symbol: string;
+  side: string;
+  qty: number;
+  limit_price: number;
+  status: string;
+};
+
 type SortKey = "symbol" | "name" | "price" | "sector" | "change";
 type PriceDirection = "up" | "down" | "none";
 
@@ -46,6 +55,7 @@ export function MarketSection({
   gameEnded,
   allowFractional,
   symbolFromUrl,
+  pendingOrders = [],
 }: {
   gameId: string;
   instruments: Instrument[];
@@ -55,6 +65,7 @@ export function MarketSection({
   gameEnded: boolean;
   allowFractional: boolean;
   symbolFromUrl?: string | null;
+  pendingOrders?: PendingOrder[];
 }) {
   const [instruments, setInstruments] = useState<Instrument[]>(initialInstruments);
   const [search, setSearch] = useState("");
@@ -359,6 +370,7 @@ export function MarketSection({
           allowFractional={allowFractional}
           onClose={handleCloseDetail}
           chartRefreshKey={chartRefreshKey}
+          pendingOrders={pendingOrders.filter((o) => o.symbol === selectedSymbol && o.status === "open")}
         />
         </div>
       )}
@@ -369,7 +381,7 @@ export function MarketSection({
 /* ──── Detail panel when a stock is selected ──── */
 
 function DetailPanel({
-  gameId, inst, position, myCash, feeBps, gameEnded, allowFractional, onClose, chartRefreshKey,
+  gameId, inst, position, myCash, feeBps, gameEnded, allowFractional, onClose, chartRefreshKey, pendingOrders = [],
 }: {
   gameId: string;
   inst: { symbol: string; name: string | null; price: number | null; currency: string };
@@ -380,6 +392,7 @@ function DetailPanel({
   allowFractional: boolean;
   onClose: () => void;
   chartRefreshKey?: number;
+  pendingOrders?: PendingOrder[];
 }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -434,7 +447,12 @@ function DetailPanel({
       </div>
 
       {/* Chart */}
-      <PriceChartSingle symbol={inst.symbol} displayPrice={livePrice} refreshTrigger={chartRefreshKey} />
+      <PriceChartSingle
+        symbol={inst.symbol}
+        displayPrice={livePrice}
+        refreshTrigger={chartRefreshKey}
+        pendingOrders={pendingOrders}
+      />
 
       {/* Trade form */}
       <div className="pt-2 border-t border-slate-100">

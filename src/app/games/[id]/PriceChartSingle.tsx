@@ -12,6 +12,7 @@ import {
   type LineData,
   type Time,
   ColorType,
+  LineStyle,
 } from "lightweight-charts";
 
 type RawPoint = { price: number; at: string };
@@ -88,7 +89,19 @@ function toLineData(points: RawPoint[], candleMinutes: number): LineData[] {
     .map(([time, value]) => ({ time: time as Time, value }));
 }
 
-export function PriceChartSingle({ symbol, displayPrice, refreshTrigger }: { symbol: string; displayPrice?: number | null; refreshTrigger?: number }) {
+type PendingOrder = { id: string; symbol: string; side: string; qty: number; limit_price: number };
+
+export function PriceChartSingle({
+  symbol,
+  displayPrice,
+  refreshTrigger,
+  pendingOrders = [],
+}: {
+  symbol: string;
+  displayPrice?: number | null;
+  refreshTrigger?: number;
+  pendingOrders?: PendingOrder[];
+}) {
   const [raw, setRaw] = useState<RawPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<TimeRange>("4H");
@@ -207,8 +220,9 @@ export function PriceChartSingle({ symbol, displayPrice, refreshTrigger }: { sym
       },
     });
 
+    let series: ISeriesApi<"Candlestick"> | ISeriesApi<"Line">;
     if (mode === "candle") {
-      const series = chart.addSeries(CandlestickSeries, {
+      series = chart.addSeries(CandlestickSeries, {
         upColor: "#16a34a",
         downColor: "#dc2626",
         borderUpColor: "#16a34a",
@@ -219,13 +233,27 @@ export function PriceChartSingle({ symbol, displayPrice, refreshTrigger }: { sym
       series.setData(candles);
     } else {
       const color = trend === "up" ? "#16a34a" : "#dc2626";
-      const series = chart.addSeries(LineSeries, {
+      series = chart.addSeries(LineSeries, {
         color,
         lineWidth: 2,
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
       });
       series.setData(lineData);
+    }
+
+    // Lignes pour les ordres limite en attente
+    for (const order of pendingOrders) {
+      if (order.symbol !== symbol || order.limit_price <= 0) continue;
+      const isBuy = order.side === "buy";
+      series.createPriceLine({
+        price: order.limit_price,
+        color: isBuy ? "#16a34a" : "#dc2626",
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `${isBuy ? "ACH" : "VEN"} ${order.qty} @ ${order.limit_price.toFixed(2)}`,
+      });
     }
 
     chart.timeScale().fitContent();
@@ -245,7 +273,7 @@ export function PriceChartSingle({ symbol, displayPrice, refreshTrigger }: { sym
         chartRef.current = null;
       }
     };
-  }, [candles, lineData, mode, trend]);
+  }, [candles, lineData, mode, trend, pendingOrders, symbol]);
 
   if (!symbol) return null;
 
