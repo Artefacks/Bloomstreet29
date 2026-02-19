@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { MarketSection } from "./MarketSection";
 import { EquityChart } from "./EquityChart";
 import { PositionsCard } from "./PositionsCard";
+import { PortfolioSummary } from "./PortfolioSummary";
 
 export default async function GamePage({
   params,
@@ -130,36 +131,17 @@ export default async function GamePage({
           <div className="space-y-4">
             {/* Cash + Perf combined */}
             <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-              <div className="flex items-center justify-between gap-4 mb-2">
-                <div>
-                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cash</p>
-                  <p className="text-sm font-semibold text-slate-900 font-mono">
-                    {state.myCash != null ? state.myCash.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"} CHF
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">P&amp;L</p>
-                  <p className={`text-sm font-semibold font-mono ${state.myPnl != null && state.myPnl >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {state.myPnl != null
-                      ? (state.myPnl >= 0 ? "+" : "") + state.myPnl.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " CHF"
-                      : "—"}
-                  </p>
-                  {state.myPnlPct != null && (
-                    <p className="text-[10px] text-slate-500">
-                      {(state.myPnlPct >= 0 ? "+" : "") + state.myPnlPct.toFixed(2)}%
-                    </p>
-                  )}
-                </div>
-                {state.myTotalValue != null && (
-                  <div className="text-right">
-                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Total</p>
-                    <p className="text-sm font-semibold text-slate-900 font-mono">
-                      {state.myTotalValue.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} CHF
-                    </p>
-                  </div>
+              <PortfolioSummary
+                gameId={gameId}
+                initialCash={state.game.initial_cash}
+                myCash={state.myCash ?? 0}
+                positions={state.myPositions}
+                pendingOrders={state.pendingOrders.filter((o) => o.status === "open")}
+                currencyMap={Object.fromEntries(
+                  state.instruments.map((i) => [i.symbol, i.currency])
                 )}
-              </div>
-
+                feeBps={state.game.fee_bps}
+              />
               {/* Equity chart inline — auto-refreshing */}
               <div className="border-t border-slate-100 pt-2">
                 <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-1">Evolution du capital</p>
