@@ -13,6 +13,7 @@ function usDisplayOscillation(price: number, symbol: string, now: number): numbe
   return Math.round(price * (1 + r * 0.0005) * 10000) / 10000;
 }
 import { matchPendingOrders } from "@/lib/order-matching";
+import { getSymbolsWithRecentHistory } from "@/lib/price-history";
 
 /**
  * GET /api/prices?symbols=AAPL,NESN.SW,...
@@ -124,12 +125,17 @@ export async function GET(request: NextRequest) {
   // Write updated simulated prices + match pending orders (fire-and-forget)
   if (toWrite.length > 0) {
     const bgWork = async () => {
+      const writeSymbols = toWrite.map((t) => t.symbol);
+      const recentHistory = await getSymbolsWithRecentHistory(supabase, writeSymbols);
       for (const { symbol, price } of toWrite) {
         await supabase.from("prices_latest").upsert(
           { symbol, price, as_of: nowISO, source: "sim" },
           { onConflict: "symbol" }
         );
-        await supabase.from("price_history").insert({ symbol, price, as_of: nowISO });
+        if (!recentHistory.has(symbol)) {
+          await supabase.from("price_history").insert({ symbol, price, as_of: nowISO });
+          recentHistory.add(symbol);
+        }
       }
       // After prices are written, check if any limit orders can be filled
       try {

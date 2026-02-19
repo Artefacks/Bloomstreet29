@@ -4,6 +4,7 @@ import { fetchQuote, batchProcess } from "@/lib/finnhub";
 import { isSimulated, simulatePrice } from "@/lib/price-sim";
 import { getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
 import { matchPendingOrders } from "@/lib/order-matching";
+import { getSymbolsWithRecentHistory } from "@/lib/price-history";
 
 /** Micro-oscillation déterministe pour les actions US (±0.08%) — simule les petits mouvements réels, aide les ordres limite */
 function usPriceOscillation(price: number, symbol: string, timestampMs: number): number {
@@ -74,6 +75,9 @@ export async function POST(request: NextRequest) {
   const list: Inst[] = instruments ?? [];
   if (list.length === 0) return NextResponse.json({ ok: true, updated: 0 });
 
+  const allSymbols = list.map((i) => i.symbol);
+  const recentHistory = await getSymbolsWithRecentHistory(supabase, allSymbols);
+
   // Load current prices for simulated stocks (need last price as base)
   const simSymbols = list.filter((i) => isSimulated(i.symbol)).map((i) => i.symbol);
   const priceMap = new Map<string, number>();
@@ -107,7 +111,10 @@ export async function POST(request: NextRequest) {
     );
     if (!upsertErr) {
       updatedSim++;
-      await supabase.from("price_history").insert({ symbol: inst.symbol, price: newPrice, as_of: nowISO });
+      if (!recentHistory.has(inst.symbol)) {
+        await supabase.from("price_history").insert({ symbol: inst.symbol, price: newPrice, as_of: nowISO });
+        recentHistory.add(inst.symbol);
+      }
     }
   }
 
@@ -130,7 +137,10 @@ export async function POST(request: NextRequest) {
       );
       if (!upsertErr) {
         updatedReal++;
-        await supabase.from("price_history").insert({ symbol: inst.symbol, price, as_of: nowISO });
+        if (!recentHistory.has(inst.symbol)) {
+          await supabase.from("price_history").insert({ symbol: inst.symbol, price, as_of: nowISO });
+          recentHistory.add(inst.symbol);
+        }
       }
     } catch (e) {
       console.warn("[prices/refresh-public]", inst.symbol, e);

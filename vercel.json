@@ -3,6 +3,10 @@
     {
       "path": "/api/prices/refresh",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/prices/cleanup",
+      "schedule": "0 3 * * *"
     }
   ]
 }
