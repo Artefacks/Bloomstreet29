@@ -29,17 +29,15 @@ export async function POST(request: NextRequest) {
 
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const { count, error } = await supabase
+  const { error } = await supabase
     .from("price_history")
     .delete()
-    .lt("as_of", cutoff)
-    .select("*", { count: "exact", head: true });
+    .lt("as_of", cutoff);
 
   if (error) {
     console.error("[prices/cleanup]", error);
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  const deleted = count ?? 0;
-  return NextResponse.json({ ok: true, deleted });
+  return NextResponse.json({ ok: true });
 }
