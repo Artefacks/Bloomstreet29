@@ -82,6 +82,7 @@ export function MarketSection({
     }
   }, [selectedSymbol, symbolFromUrl]);
   const [activeSector, setActiveSector] = useState<string | null>(null);
+  const [chartRefreshKey, setChartRefreshKey] = useState(0);
 
   // Price tracking: two refs
   // basePricesRef = prices at page load, never updated → used for % change
@@ -204,6 +205,7 @@ export function MarketSection({
           symbols={symbols}
           initialPrices={initialPrices}
           onPricesUpdate={handlePricesUpdate}
+          onRefreshComplete={() => setChartRefreshKey((k) => k + 1)}
           refreshInterval={15000}
         />
       </div>
@@ -356,6 +358,7 @@ export function MarketSection({
           gameEnded={gameEnded}
           allowFractional={allowFractional}
           onClose={handleCloseDetail}
+          chartRefreshKey={chartRefreshKey}
         />
         </div>
       )}
@@ -366,7 +369,7 @@ export function MarketSection({
 /* ──── Detail panel when a stock is selected ──── */
 
 function DetailPanel({
-  gameId, inst, position, myCash, feeBps, gameEnded, allowFractional, onClose,
+  gameId, inst, position, myCash, feeBps, gameEnded, allowFractional, onClose, chartRefreshKey,
 }: {
   gameId: string;
   inst: { symbol: string; name: string | null; price: number | null; currency: string };
@@ -376,6 +379,7 @@ function DetailPanel({
   gameEnded: boolean;
   allowFractional: boolean;
   onClose: () => void;
+  chartRefreshKey?: number;
 }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -430,7 +434,7 @@ function DetailPanel({
       </div>
 
       {/* Chart */}
-      <PriceChartSingle symbol={inst.symbol} displayPrice={livePrice} />
+      <PriceChartSingle symbol={inst.symbol} displayPrice={livePrice} refreshTrigger={chartRefreshKey} />
 
       {/* Trade form */}
       <div className="pt-2 border-t border-slate-100">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   LineChart,
   Line,
@@ -20,54 +20,72 @@ export function PriceCharts({ symbols }: { symbols: string[] }) {
   const [data, setData] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchHistory = useCallback(async () => {
+    if (symbols.length === 0) return;
+    try {
+      const res = await fetch(
+        `/api/prices/history?symbols=${encodeURIComponent(symbols.join(","))}&limit=100`
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      const history: Record<string, { price: number; at: string }[]> = json.history ?? {};
+
+      const byTime = new Map<string, Record<string, number>>();
+      symbols.forEach((sym) => {
+        (history[sym] ?? []).forEach((p: { price: number; at: string }) => {
+          const t = p.at;
+          if (!byTime.has(t)) byTime.set(t, {});
+          byTime.get(t)![sym] = p.price;
+        });
+      });
+
+      const sorted = Array.from(byTime.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([at, values]) => ({
+          at,
+          date: new Date(at).toLocaleString("fr-FR", {
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          ...values,
+        }));
+
+      setData(sorted);
+    } finally {
+      setLoading(false);
+    }
+  }, [symbols.join(",")]);
+
   useEffect(() => {
     if (symbols.length === 0) {
       setLoading(false);
       return;
     }
     let cancelled = false;
+    setLoading(true);
     (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(
-          `/api/prices/history?symbols=${encodeURIComponent(symbols.join(","))}&limit=100`
-        );
-        if (!res.ok) return;
-        const json = await res.json();
-        const history: Record<string, { price: number; at: string }[]> = json.history ?? {};
-        if (cancelled) return;
-
-        const byTime = new Map<string, Record<string, number>>();
-        symbols.forEach((sym) => {
-          (history[sym] ?? []).forEach((p: { price: number; at: string }) => {
-            const t = p.at;
-            if (!byTime.has(t)) byTime.set(t, {});
-            byTime.get(t)![sym] = p.price;
-          });
-        });
-
-        const sorted = Array.from(byTime.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([at, values]) => ({
-            at,
-            date: new Date(at).toLocaleString("fr-FR", {
-              day: "2-digit",
-              month: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            ...values,
-          }));
-
-        setData(sorted);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await fetchHistory();
+      if (cancelled) return;
     })();
+    const iv = setInterval(fetchHistory, 60_000);
     return () => {
       cancelled = true;
+      clearInterval(iv);
     };
-  }, [symbols.join(",")]);
+  }, [symbols.join(","), fetchHistory]);
+
+  // Refetch quand l'utilisateur revient sur l'onglet (Page Visibility API)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && symbols.length > 0) {
+        fetchHistory();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [symbols.join(","), fetchHistory]);
 
   if (loading) {
     return (

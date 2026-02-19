@@ -88,7 +88,7 @@ function toLineData(points: RawPoint[], candleMinutes: number): LineData[] {
     .map(([time, value]) => ({ time: time as Time, value }));
 }
 
-export function PriceChartSingle({ symbol, displayPrice }: { symbol: string; displayPrice?: number | null }) {
+export function PriceChartSingle({ symbol, displayPrice, refreshTrigger }: { symbol: string; displayPrice?: number | null; refreshTrigger?: number }) {
   const [raw, setRaw] = useState<RawPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<TimeRange>("4H");
@@ -127,6 +127,24 @@ export function PriceChartSingle({ symbol, displayPrice }: { symbol: string; dis
       clearTimeout(refetchT);
       clearInterval(iv);
     };
+  }, [symbol, fetchHistory]);
+
+  // Refetch quand l'utilisateur clique sur Rafraîchir (refreshTrigger incrémenté)
+  useEffect(() => {
+    if (symbol && refreshTrigger != null && refreshTrigger > 0) {
+      fetchHistory();
+    }
+  }, [refreshTrigger, symbol, fetchHistory]);
+
+  // Refetch quand l'utilisateur revient sur l'onglet (Page Visibility API)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && symbol) {
+        fetchHistory();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [symbol, fetchHistory]);
 
   const candles = useMemo(() => groupIntoCandles(raw, config.candleMinutes), [raw, config.candleMinutes]);

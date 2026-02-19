@@ -8,11 +8,14 @@ export function LivePrices({
   symbols,
   initialPrices,
   onPricesUpdate,
+  onRefreshComplete,
   refreshInterval = 15000,
 }: {
   symbols: string[];
   initialPrices: Record<string, number | null>;
   onPricesUpdate: (prices: Record<string, number | null>) => void;
+  /** Appelé après un refresh manuel réussi — permet de synchroniser les graphiques */
+  onRefreshComplete?: () => void;
   refreshInterval?: number;
 }) {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -59,6 +62,7 @@ export function LivePrices({
             : "Aucun prix à mettre à jour. Vérifie /api/prices/debug";
         setLastUpdate(new Date());
         await fetchPrices();
+        onRefreshComplete?.();
         // Toast de feedback
         const toast = document.createElement("div");
         toast.textContent = msg;
