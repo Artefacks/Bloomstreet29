@@ -20,6 +20,7 @@ type Props = {
   positions: Position[];
   currencyMap: Record<string, string>;
   fxRates: Record<string, number>;
+  refreshTrigger?: number;
 };
 
 function toPoint(at: string, value: number): Point {
@@ -31,7 +32,7 @@ function toPoint(at: string, value: number): Point {
   };
 }
 
-export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates }: Props) {
+export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, refreshTrigger }: Props) {
   const [history, setHistory] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveValue, setLiveValue] = useState<number | null>(null);
@@ -52,22 +53,24 @@ export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates }:
     }
   }, [gameId]);
 
-  // Compute live equity from current prices
+  // Compute live equity from current prices (toujours cohérent avec Cash/Total affichés)
   const computeLive = useCallback(async () => {
-    if (fetchingRef.current || symbols.length === 0) return;
+    if (fetchingRef.current) return;
     fetchingRef.current = true;
     try {
-      const res = await fetch(`/api/prices?symbols=${encodeURIComponent(symbols.join(","))}`);
-      if (!res.ok) return;
-      const json = await res.json();
-      const pricesMap = json.prices ?? {};
       let equity = myCash;
-      for (const pos of positions) {
-        const p = pricesMap[pos.symbol]?.price;
-        if (p != null) {
-          const ccy = currencyMap[pos.symbol] ?? "USD";
-          const rate = fxRates[ccy] ?? 1;
-          equity += pos.qty * Number(p) * rate;
+      if (symbols.length > 0) {
+        const res = await fetch(`/api/prices?symbols=${encodeURIComponent(symbols.join(","))}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const pricesMap = json.prices ?? {};
+        for (const pos of positions) {
+          const p = pricesMap[pos.symbol]?.price;
+          if (p != null) {
+            const ccy = currencyMap[pos.symbol] ?? "USD";
+            const rate = fxRates[ccy] ?? 1;
+            equity += pos.qty * Number(p) * rate;
+          }
         }
       }
       setLiveValue(equity);
@@ -87,18 +90,31 @@ export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates }:
     return () => { clearInterval(histIv); clearInterval(liveIv); };
   }, [fetchHistory, computeLive]);
 
-  // Combine history + live point
+  // Recalculer la valeur live quand l'utilisateur clique Rafraîchir (header ou portfolio)
+  useEffect(() => {
+    if (refreshTrigger != null && refreshTrigger > 0) {
+      computeLive();
+    }
+  }, [refreshTrigger, computeLive]);
+
+  // Écouter le Rafraîchir du header (LivePrices) pour synchroniser le dernier point
+  useEffect(() => {
+    const onPricesRefreshed = () => computeLive();
+    window.addEventListener("bloomstreet:prices-refreshed", onPricesRefreshed);
+    return () => window.removeEventListener("bloomstreet:prices-refreshed", onPricesRefreshed);
+  }, [computeLive]);
+
+  // Combine history + live point — le dernier point reflète toujours la valeur live actuelle
   const data = useMemo(() => {
     const pts = [...history];
     if (liveValue != null) {
       const now = new Date().toISOString();
-      // Only add live point if it's newer than last history point
-      const lastAt = pts.length > 0 ? new Date(pts[pts.length - 1].at).getTime() : 0;
-      if (Date.now() - lastAt > 10_000) {
-        pts.push(toPoint(now, liveValue));
-      } else if (pts.length > 0) {
-        // Update the last point's value to the live value
-        pts[pts.length - 1] = { ...pts[pts.length - 1], value: liveValue };
+      const livePoint = toPoint(now, liveValue);
+      if (pts.length === 0) {
+        pts.push(livePoint);
+      } else {
+        // Toujours remplacer le dernier point par la valeur live pour cohérence avec Cash/Total
+        pts[pts.length - 1] = livePoint;
       }
     }
     return pts;

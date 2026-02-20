@@ -14,6 +14,7 @@ import {
   ColorType,
   LineStyle,
 } from "lightweight-charts";
+import { getExchangeForSymbol, isMarketOpenAt } from "@/lib/sectors";
 
 type RawPoint = { price: number; at: string };
 type TimeRange = "1H" | "4H" | "1J" | "1S";
@@ -31,11 +32,13 @@ function toUnixBucket(at: string, candleMinutes: number): number {
   return Math.floor(ts / (candleMinutes * 60_000)) * candleMinutes * 60;
 }
 
-function groupIntoCandles(points: RawPoint[], candleMinutes: number): CandlestickData[] {
+function groupIntoCandles(points: RawPoint[], candleMinutes: number, symbol: string): CandlestickData[] {
   if (points.length === 0) return [];
+  const exchange = getExchangeForSymbol(symbol);
   const buckets = new Map<number, number[]>();
 
   for (const p of points) {
+    if (!isMarketOpenAt(exchange, new Date(p.at).getTime())) continue;
     const bucket = toUnixBucket(p.at, candleMinutes);
     if (!buckets.has(bucket)) buckets.set(bucket, []);
     buckets.get(bucket)!.push(p.price);
@@ -75,11 +78,17 @@ function formatTickMarkLocal(time: Time, tickMarkType: TickMarkType): string {
   }
 }
 
-function toLineData(points: RawPoint[], candleMinutes: number): LineData[] {
+/**
+ * Convertit les points en LineData. Ne garde que les buckets où le marché était ouvert
+ * (évite les plats week-end/nuit).
+ */
+function toLineData(points: RawPoint[], candleMinutes: number, symbol: string): LineData[] {
   if (points.length === 0) return [];
+  const exchange = getExchangeForSymbol(symbol);
   const buckets = new Map<number, number>();
 
   for (const p of points) {
+    if (!isMarketOpenAt(exchange, new Date(p.at).getTime())) continue;
     const bucket = toUnixBucket(p.at, candleMinutes);
     buckets.set(bucket, p.price); // last price in bucket
   }
@@ -160,8 +169,8 @@ export function PriceChartSingle({
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [symbol, fetchHistory]);
 
-  const candles = useMemo(() => groupIntoCandles(raw, config.candleMinutes), [raw, config.candleMinutes]);
-  const lineData = useMemo(() => toLineData(raw, config.candleMinutes), [raw, config.candleMinutes]);
+  const candles = useMemo(() => groupIntoCandles(raw, config.candleMinutes, symbol), [raw, config.candleMinutes, symbol]);
+  const lineData = useMemo(() => toLineData(raw, config.candleMinutes, symbol), [raw, config.candleMinutes, symbol]);
 
   const stats = useMemo(() => {
     if (lineData.length < 2) return null;

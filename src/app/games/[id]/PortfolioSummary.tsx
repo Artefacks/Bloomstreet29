@@ -15,6 +15,7 @@ type Props = {
   pendingOrders: PendingOrder[];
   currencyMap: Record<string, string>;
   feeBps: number;
+  onRefreshComplete?: () => void;
 };
 
 const FX_RATES: Record<string, number> = { CHF: 1, USD: 0.88, EUR: 0.94, SEK: 0.083 };
@@ -31,6 +32,7 @@ export function PortfolioSummary({
   pendingOrders,
   currencyMap,
   feeBps,
+  onRefreshComplete,
 }: Props) {
   const router = useRouter();
   const [prices, setPrices] = useState<Record<string, number>>({});
@@ -62,13 +64,19 @@ export function PortfolioSummary({
   useEffect(() => {
     fetchPrices();
     const iv = setInterval(fetchPrices, 20_000);
-    return () => clearInterval(iv);
+    const onPricesRefreshed = () => fetchPrices();
+    window.addEventListener("bloomstreet:prices-refreshed", onPricesRefreshed);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener("bloomstreet:prices-refreshed", onPricesRefreshed);
+    };
   }, [fetchPrices]);
 
   const handleRefresh = async () => {
     setLoading(true);
     await fetchPrices();
     router.refresh();
+    onRefreshComplete?.();
   };
 
   // Reserved cash from open buy limit orders (réintégré dans le total, comme game-state)

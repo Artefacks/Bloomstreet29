@@ -63,6 +63,8 @@ export function LivePrices({
         setLastUpdate(new Date());
         await fetchPrices();
         onRefreshComplete?.();
+        // Notifier les autres composants (PortfolioSummary, EquityChart) pour synchroniser solde/graphique
+        window.dispatchEvent(new CustomEvent("bloomstreet:prices-refreshed"));
         // Toast de feedback
         const toast = document.createElement("div");
         toast.textContent = msg;

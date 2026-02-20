@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { MarketSection } from "./MarketSection";
 import { EquityChart } from "./EquityChart";
 import { PositionsCard } from "./PositionsCard";
-import { PortfolioSummary } from "./PortfolioSummary";
+import { PortfolioSection } from "./PortfolioSection";
 
 export default async function GamePage({
   params,
@@ -130,34 +130,17 @@ export default async function GamePage({
           {/* Col 1: Cash + Performance + Equity chart */}
           <div className="space-y-4">
             {/* Cash + Perf combined */}
-            <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-              <PortfolioSummary
-                gameId={gameId}
-                initialCash={state.game.initial_cash}
-                myCash={state.myCash ?? 0}
-                positions={state.myPositions}
-                pendingOrders={state.pendingOrders.filter((o) => o.status === "open")}
-                currencyMap={Object.fromEntries(
-                  state.instruments.map((i) => [i.symbol, i.currency])
-                )}
-                feeBps={state.game.fee_bps}
-              />
-              {/* Equity chart inline — auto-refreshing */}
-              <div className="border-t border-slate-100 pt-2">
-                <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-1">Evolution du capital</p>
-                <div className="h-36">
-                  <EquityChart
-                    gameId={gameId}
-                    myCash={state.myCash ?? 0}
-                    positions={state.myPositions}
-                    currencyMap={Object.fromEntries(
-                      state.instruments.map((i) => [i.symbol, i.currency])
-                    )}
-                    fxRates={{ CHF: 1, USD: 0.88, EUR: 0.94, SEK: 0.083 }}
-                  />
-                </div>
-              </div>
-            </section>
+            <PortfolioSection
+              gameId={gameId}
+              initialCash={state.game.initial_cash}
+              myCash={state.myCash ?? 0}
+              positions={state.myPositions}
+              pendingOrders={state.pendingOrders.filter((o) => o.status === "open")}
+              currencyMap={Object.fromEntries(
+                state.instruments.map((i) => [i.symbol, i.currency])
+              )}
+              feeBps={state.game.fee_bps}
+            />
           </div>
 
           {/* Col 2: Classement */}

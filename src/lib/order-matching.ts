@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
+import { recordEquitySnapshot } from "@/lib/equity-snapshot";
 
 /**
  * Order matching engine.
@@ -149,6 +150,7 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
         })
         .eq("id", order.id);
 
+      await recordEquitySnapshot(supabase, order.game_id, order.user_id, newCash);
       filled++;
     } else {
       // Sell
@@ -199,6 +201,7 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
         })
         .eq("id", order.id);
 
+      await recordEquitySnapshot(supabase, order.game_id, order.user_id, newCash);
       filled++;
     }
   }
