@@ -181,12 +181,18 @@ export async function GET(request: NextRequest) {
   }
   if (usToWrite.length > 0) {
     const bgWork = async () => {
+      const writeSymbols = usToWrite.map((t) => t.symbol);
+      const recentHistory = await getSymbolsWithRecentHistory(supabase, writeSymbols);
       for (const { symbol, price } of usToWrite) {
         await supabase.from("prices_latest").upsert(
           { symbol, price, as_of: nowISO, source: "finnhub" },
           { onConflict: "symbol" }
         );
-        // Pas de price_history pour les micro-oscillations (évite de saturer les graphiques)
+        // Écriture price_history avec sampling (1 point / 5 min) pour que les graphiques US aient des données
+        if (!recentHistory.has(symbol)) {
+          await supabase.from("price_history").insert({ symbol, price, as_of: nowISO });
+          recentHistory.add(symbol);
+        }
       }
       try {
         await matchPendingOrders(supabase);

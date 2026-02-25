@@ -106,11 +106,6 @@ export async function POST(request: NextRequest) {
   // LIMIT ORDER → save as pending, don't execute
   // ═══════════════════════════════════════════════
   if (orderType === "limit" && limitPrice != null && isFinite(limitPrice) && limitPrice > 0) {
-    const deviation = Math.abs(limitPrice - marketPrice) / marketPrice;
-    if (deviation > 0.10) {
-      return redirectToGame(request, gameId, undefined, "Prix limite trop éloigné du marché (max 10%).", symbol);
-    }
-
     // For buy limit: reserve the cash (limit_price * qty * fxRate + fees)
     if (side === "buy") {
       const reserveTotal = qtyFinal * limitPrice;

@@ -66,18 +66,8 @@ PRICE_REFRESH_SECONDS=60
 
 8. **Brancher le Cron Vercel**
    - Dans Vercel → projet → Settings → Environment Variables : ajouter `CRON_SECRET` (même valeur que dans `.env.local` pour la prod).
-   - Dans Vercel → projet → Settings → Cron Jobs (ou `vercel.json`) : ajouter une tâche qui appelle `POST https://votre-domaine.vercel.app/api/prices/refresh` toutes les 60 secondes (ou selon `PRICE_REFRESH_SECONDS`).
-   - Exemple `vercel.json` :
-     ```json
-     {
-       "crons": [
-         {
-           "path": "/api/prices/refresh",
-           "schedule": "* * * * *"
-         }
-       ]
-     }
-     ```
+   - Dans Vercel → projet → Settings → Cron Jobs (ou `vercel.json`) : le projet inclut déjà 2 crons.
+   - Le `vercel.json` configure 2 crons (1 exécution/jour max sur plan gratuit) : cleanup (3h), refresh (9h). Les graphiques sont alimentés surtout par le polling frontend (GET /api/prices).
    - La route accepte soit le header `x-cron-secret: VOTRE_CRON_SECRET`, soit `Authorization: Bearer VOTRE_CRON_SECRET`. Configurer dans Vercel la variable `CRON_SECRET` et, si le cron n’envoie pas `x-cron-secret`, utiliser l’en-tête Authorization (selon la doc Vercel Cron).
 
 ---

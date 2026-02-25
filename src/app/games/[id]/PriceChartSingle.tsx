@@ -24,7 +24,7 @@ const RANGE_CONFIG: Record<TimeRange, { limit: number; candleMinutes: number; la
   "1H": { limit: 60, candleMinutes: 1, label: "1H" },
   "4H": { limit: 240, candleMinutes: 5, label: "4H" },
   "1J": { limit: 500, candleMinutes: 15, label: "1J" },
-  "1S": { limit: 500, candleMinutes: 60, label: "1S" },
+  "1S": { limit: 600, candleMinutes: 60, label: "1S" }, // ~7 jours (sampling 5 min)
 };
 
 function toUnixBucket(at: string, candleMinutes: number): number {

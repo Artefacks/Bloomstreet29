@@ -5,8 +5,10 @@ import { createClient } from "@supabase/supabase-js";
 const RETENTION_DAYS = 7;
 
 /**
- * POST /api/prices/cleanup   (cron, protected by CRON_SECRET)
+ * POST /api/prices/cleanup   (cron quotidien, protected by CRON_SECRET)
  * Supprime les lignes de price_history plus vieilles que 7 jours.
+ * Les données sont alimentées par GET /api/prices (polling frontend) et
+ * POST /api/prices/refresh (cron). Sampling : 1 point / 5 min par symbole.
  */
 export async function POST(request: NextRequest) {
   const cronSecret = request.headers.get("x-cron-secret");
