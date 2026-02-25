@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 type PricesMap = Record<string, { price: number; as_of: string }>;
 
@@ -18,6 +19,7 @@ export function LivePrices({
   onRefreshComplete?: () => void;
   refreshInterval?: number;
 }) {
+  const router = useRouter();
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const fetchingRef = useRef(false);
@@ -65,6 +67,8 @@ export function LivePrices({
         onRefreshComplete?.();
         // Notifier les autres composants (PortfolioSummary, EquityChart) pour synchroniser solde/graphique
         window.dispatchEvent(new CustomEvent("bloomstreet:prices-refreshed"));
+        // Rafraîchir les données serveur (positions, ordres) au cas où des ordres limite ont été exécutés
+        router.refresh();
         // Toast de feedback
         const toast = document.createElement("div");
         toast.textContent = msg;

@@ -86,6 +86,8 @@ type Props = {
   tick?: number; // optionnel : tick partagé avec le graphique (toutes les 5s)
 };
 
+const CONFIRM_THRESHOLD_PCT = 0.2; // Demander confirmation si > 20% du cash/position
+
 export function GameTradeForm({
   gameId, symbol, price, currency, hasPosition, positionQty, avgCost,
   myCash, feeBps, gameEnded = false, allowFractional = true, fxRate = 1, tick: tickProp,
@@ -95,6 +97,7 @@ export function GameTradeForm({
   const [qty, setQty] = useState("");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [internalTick, setInternalTick] = useState(0);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
 
   const tick = tickProp ?? internalTick;
 
@@ -141,6 +144,12 @@ export function GameTradeForm({
 
   const canBuy = preview != null && preview.newCash >= 0 && qtyFinal > 0;
   const canSell = preview != null && qtyFinal > 0 && qtyFinal <= positionQty;
+
+  // Faut-il demander confirmation ? (gros ordres)
+  const needsConfirmation = preview != null && qtyFinal > 0 && (
+    (side === "buy" && preview.totalCHF > myCash * CONFIRM_THRESHOLD_PCT) ||
+    (side === "sell" && qtyFinal > positionQty * CONFIRM_THRESHOLD_PCT)
+  );
 
   const setMaxBuy = () => {
     if (!execPrice || execPrice <= 0) return;
@@ -307,7 +316,20 @@ export function GameTradeForm({
       )}
 
       {/* ──── Submit ──── */}
-      <form method="POST" action="/api/trade">
+      <form
+        method="POST"
+        action="/api/trade"
+        id="trade-form"
+        onSubmit={(e) => {
+          if (needsConfirmation && !pendingSubmit) {
+            e.preventDefault();
+            if (confirm(`${side === "buy" ? "Achat" : "Vente"} de ${qtyFinal} ${symbol} pour ${preview?.totalCHF.toFixed(0)} CHF. Confirmer ?`)) {
+              setPendingSubmit(true);
+              (e.target as HTMLFormElement).submit();
+            }
+          }
+        }}
+      >
         <input type="hidden" name="gameId" value={gameId} />
         <input type="hidden" name="symbol" value={symbol} />
         <input type="hidden" name="qty" value={qtyFinal > 0 ? qtyFinal : ""} />
@@ -317,9 +339,9 @@ export function GameTradeForm({
           <input type="hidden" name="limitPrice" value={execPrice} />
         )}
         <button type="submit"
-          disabled={gameEnded || qtyFinal <= 0 || execPrice == null || (side === "buy" && !canBuy) || (side === "sell" && !canSell)}
+          disabled={gameEnded || qtyFinal <= 0 || execPrice == null || (side === "buy" && !canBuy) || (side === "sell" && !canSell) || pendingSubmit}
           className={`w-full py-2.5 rounded-lg font-medium text-sm text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${side === "buy" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}`}>
-          {orderType === "limit"
+          {pendingSubmit ? "Envoi…" : orderType === "limit"
             ? `Placer ordre limite ${side === "buy" ? "d'achat" : "de vente"} ${qtyFinal > 0 ? qtyFinal + " " + symbol : ""}`
             : side === "buy"
               ? `Acheter au marché ${qtyFinal > 0 ? qtyFinal + " " + symbol : ""}`

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getGameState } from "@/lib/game-state";
-import { getCurrencyForSymbol, formatCurrency } from "@/lib/finnhub";
+import { getCurrencyForSymbol, formatCurrency, FX_RATES_TO_CHF } from "@/lib/finnhub";
 import { redirect } from "next/navigation";
 import { MarketSection } from "./MarketSection";
 import { EquityChart } from "./EquityChart";
@@ -40,7 +40,7 @@ export default async function GamePage({
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="max-w-md mx-auto text-center px-4">
-          <p className="text-red-600 font-medium">Pas membre / acces refuse.</p>
+          <p className="text-red-600 font-medium">Accès refusé — tu n&apos;es pas membre de cette partie.</p>
           <Link href="/" className="text-blue-600 hover:underline mt-2 inline-block">
             Retour à l&apos;accueil
           </Link>
@@ -158,6 +158,7 @@ export default async function GamePage({
               )}
               feeBps={state.game.fee_bps}
               leverageMultiplier={state.game.leverage_multiplier}
+              isBlitz={isBlitz}
             />
           </div>
 
@@ -216,8 +217,9 @@ export default async function GamePage({
                 currencyMap={Object.fromEntries(
                   state.instruments.map((i) => [i.symbol, i.currency])
                 )}
-                fxRates={{ CHF: 1, USD: 0.88, EUR: 0.94, SEK: 0.083 }}
+                fxRates={FX_RATES_TO_CHF}
                 leverageMultiplier={state.game.leverage_multiplier}
+                refreshIntervalMs={isBlitz ? 5000 : 15000}
               />
             </section>
 
@@ -251,9 +253,10 @@ export default async function GamePage({
                           <input type="hidden" name="gameId" value={gameId} />
                           <button
                             type="submit"
-                            className="text-[10px] text-red-500 hover:text-red-700 hover:underline"
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 font-medium"
+                            title="Annuler cet ordre"
                           >
-                            &times;
+                            Annuler
                           </button>
                         </form>
                       </div>

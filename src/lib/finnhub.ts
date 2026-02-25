@@ -40,7 +40,7 @@ export function formatCurrency(currency: string): string {
 }
 
 /* ──── Exchange rates to CHF (approximate, updated periodically) ──── */
-const FX_TO_CHF: Record<string, number> = {
+export const FX_RATES_TO_CHF: Record<string, number> = {
   CHF: 1,
   USD: 0.88,
   EUR: 0.94,
@@ -48,7 +48,7 @@ const FX_TO_CHF: Record<string, number> = {
 };
 
 export function getExchangeRateToCHF(currency: string): number {
-  return FX_TO_CHF[currency] ?? 1;
+  return FX_RATES_TO_CHF[currency] ?? 1;
 }
 
 export function convertToCHF(amount: number, currency: string): number {

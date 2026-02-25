@@ -1,12 +1,7 @@
 {
   "crons": [
-    {
-      "path": "/api/prices/cleanup",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/prices/refresh",
-      "schedule": "0 9 * * *"
-    }
+    {"path": "/api/prices/cleanup", "schedule": "0 3 * * *"},
+    {"path": "/api/prices/refresh", "schedule": "0 9 * * *"},
+    {"path": "/api/orders/match", "schedule": "*/2 * * * *"}
   ]
 }

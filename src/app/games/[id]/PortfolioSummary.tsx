@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
+import { getCurrencyForSymbol, getExchangeRateToCHF, FX_RATES_TO_CHF } from "@/lib/finnhub";
 
 type Position = { symbol: string; qty: number; avg_cost: number };
 type PendingOrder = { symbol: string; side: string; qty: number; limit_price: number };
@@ -17,9 +17,9 @@ type Props = {
   feeBps: number;
   leverageMultiplier?: number;
   onRefreshComplete?: () => void;
+  refreshIntervalMs?: number;
 };
 
-const FX_RATES: Record<string, number> = { CHF: 1, USD: 0.88, EUR: 0.94, SEK: 0.083 };
 
 function fmt(n: number, d = 0) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -35,13 +35,14 @@ export function PortfolioSummary({
   feeBps,
   leverageMultiplier = 1,
   onRefreshComplete,
+  refreshIntervalMs = 20000,
 }: Props) {
   const router = useRouter();
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   const symbols = [...new Set(positions.map((p) => p.symbol))];
-  const fx = (sym: string) => FX_RATES[currencyMap[sym] ?? "USD"] ?? 1;
+  const fx = (sym: string) => FX_RATES_TO_CHF[currencyMap[sym] ?? "USD"] ?? 1;
 
   const fetchPrices = useCallback(async () => {
     if (symbols.length === 0) {
@@ -65,14 +66,14 @@ export function PortfolioSummary({
 
   useEffect(() => {
     fetchPrices();
-    const iv = setInterval(fetchPrices, 20_000);
+    const iv = setInterval(fetchPrices, refreshIntervalMs);
     const onPricesRefreshed = () => fetchPrices();
     window.addEventListener("bloomstreet:prices-refreshed", onPricesRefreshed);
     return () => {
       clearInterval(iv);
       window.removeEventListener("bloomstreet:prices-refreshed", onPricesRefreshed);
     };
-  }, [fetchPrices]);
+  }, [fetchPrices, refreshIntervalMs]);
 
   const handleRefresh = async () => {
     setLoading(true);

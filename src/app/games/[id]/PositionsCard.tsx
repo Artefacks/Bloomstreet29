@@ -17,6 +17,7 @@ type Props = {
   currencyMap: Record<string, string>;
   fxRates: Record<string, number>; // currency → CHF rate
   leverageMultiplier?: number;
+  refreshIntervalMs?: number;
 };
 
 function fmtCcy(c: string) {
@@ -27,7 +28,7 @@ function fmt(n: number, d = 2) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-export function PositionsCard({ gameId, positions, symbols, initialPrices, currencyMap, fxRates, leverageMultiplier = 1 }: Props) {
+export function PositionsCard({ gameId, positions, symbols, initialPrices, currencyMap, fxRates, leverageMultiplier = 1, refreshIntervalMs = 15000 }: Props) {
   const [prices, setPrices] = useState<Record<string, number | null>>(initialPrices);
   const fetchingRef = useRef(false);
 
@@ -56,10 +57,10 @@ export function PositionsCard({ gameId, positions, symbols, initialPrices, curre
   useEffect(() => {
     if (symbols.length === 0) return;
     fetchPrices();
-    const iv = setInterval(fetchPrices, 15_000);
+    const iv = setInterval(fetchPrices, refreshIntervalMs);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbols.join(",")]);
+  }, [symbols.join(","), refreshIntervalMs]);
 
   if (positions.length === 0) {
     return <p className="text-slate-400 text-sm">Aucune position.</p>;
