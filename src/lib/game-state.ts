@@ -111,10 +111,12 @@ export async function getGameState(
     .eq("game_id", gameId)
     .eq("user_id", userId);
 
+  const isBlitz = (game.game_mode as string) === "blitz";
   const { data: instruments } = await supabase
     .from("instruments")
-    .select("symbol, name")
-    .limit(100);
+    .select("symbol, name, blitz_only")
+    .eq("blitz_only", isBlitz)
+    .limit(isBlitz ? 20 : 100);
 
   const symbols = instruments?.map((i) => i.symbol) ?? [];
   const { data: prices } = await supabase

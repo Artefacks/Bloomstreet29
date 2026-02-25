@@ -9,6 +9,7 @@ const FINNHUB_SEARCH = "https://finnhub.io/api/v1/search";
 /* ──── Currency helpers ──── */
 
 export function getCurrencyForSymbol(symbol: string): string {
+  if (symbol.endsWith(".BLITZ")) return "USD";
   if (symbol.endsWith(".SW")) return "CHF";
   if (symbol.endsWith(".ST")) return "SEK";
   if (

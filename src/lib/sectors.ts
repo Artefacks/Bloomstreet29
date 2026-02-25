@@ -23,6 +23,7 @@ export const SECTORS: Sector[] = [
   { id: "materials", name: "Matériaux", emoji: "🧱", color: "#78716c" },
   { id: "realestate", name: "Immobilier", emoji: "🏠", color: "#a3e635" },
   { id: "insurance", name: "Assurance", emoji: "🛡️", color: "#fbbf24" },
+  { id: "blitz", name: "Blitz", emoji: "⚡", color: "#f59e0b" },
 ];
 
 const SYMBOL_SECTOR_MAP: Record<string, string> = {
@@ -84,6 +85,12 @@ const SYMBOL_SECTOR_MAP: Record<string, string> = {
 
   // ── Real Estate ──
   "PSPN.SW": "realestate", "SPSN.SW": "realestate",
+
+  // ── Blitz (gamifié) ──
+  "BTC.BLITZ": "blitz", "ETH.BLITZ": "blitz", "DOGE.BLITZ": "blitz",
+  "MEME.BLITZ": "blitz", "MOON.BLITZ": "blitz", "PEPE.BLITZ": "blitz",
+  "SHIB.BLITZ": "blitz", "WOOF.BLITZ": "blitz", "ROCKET.BLITZ": "blitz",
+  "DIAMOND.BLITZ": "blitz", "YOLO.BLITZ": "blitz", "LAMBO.BLITZ": "blitz",
 };
 
 export function getSectorForSymbol(symbol: string): Sector | null {
@@ -150,6 +157,7 @@ export type Exchange = {
 };
 
 export const EXCHANGES: Exchange[] = [
+  { suffix: ".BLITZ", name: "Blitz Arena", flag: "⚡", timezone: "UTC", openHour: 0, openMinute: 0, closeHour: 24, closeMinute: 0, weekdays: [0,1,2,3,4,5,6] },
   { suffix: "", name: "NYSE / NASDAQ", flag: "🇺🇸", timezone: "America/New_York", openHour: 9, openMinute: 30, closeHour: 16, closeMinute: 0, weekdays: [1,2,3,4,5] },
   { suffix: ".SW", name: "SIX Swiss", flag: "🇨🇭", timezone: "Europe/Zurich", openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 0, weekdays: [1,2,3,4,5] },
   { suffix: ".PA", name: "Euronext Paris", flag: "🇫🇷", timezone: "Europe/Paris", openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 30, weekdays: [1,2,3,4,5] },

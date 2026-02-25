@@ -155,13 +155,14 @@ export function simulatePrice(
   const z = normalRandom(rng);
   const eventRoll = rng();
 
-  // Base per-minute volatility, modulated by time of day
-  const baseSigma = 0.005;
-  const volMult = intradayVolMultiplier(timestamp);
+  // Blitz symbols (.BLITZ) : 3x volatility, plus d'événements
+  const isBlitz = symbol.endsWith(".BLITZ");
+  const baseSigma = isBlitz ? 0.015 : 0.005;
+  const volMult = isBlitz ? 1.5 : intradayVolMultiplier(timestamp);
   let sigma = baseSigma * volMult;
 
-  // ~5% chance of a "news event" → 3x volatility
-  if (eventRoll < 0.05) {
+  // ~5% chance of a "news event" → 3x volatility (Blitz: 15% chance)
+  if (eventRoll < (isBlitz ? 0.15 : 0.05)) {
     sigma *= 3;
   }
 

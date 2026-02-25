@@ -72,8 +72,8 @@ export default async function GamePage({
             </Link>
             <div className="flex items-center gap-3 text-xs text-slate-300">
               {isBlitz && (
-                <span className="px-2 py-0.5 rounded bg-amber-500/80 text-amber-950 font-bold text-[10px]">
-                  ⚡ BLITZ
+                <span className="px-2 py-0.5 rounded bg-amber-500/90 text-amber-950 font-bold text-[10px] animate-pulse">
+                  ⚡ BLITZ ARENA
                 </span>
               )}
               <span>
@@ -137,6 +137,7 @@ export default async function GamePage({
             allowFractional={state.game.allow_fractional}
             symbolFromUrl={urlParams.symbol}
             pendingOrders={state.pendingOrders}
+            isBlitz={isBlitz}
           />
         </section>
 

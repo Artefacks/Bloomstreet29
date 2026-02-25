@@ -56,6 +56,7 @@ export function MarketSection({
   allowFractional,
   symbolFromUrl,
   pendingOrders = [],
+  isBlitz = false,
 }: {
   gameId: string;
   instruments: Instrument[];
@@ -66,6 +67,7 @@ export function MarketSection({
   allowFractional: boolean;
   symbolFromUrl?: string | null;
   pendingOrders?: PendingOrder[];
+  isBlitz?: boolean;
 }) {
   const [instruments, setInstruments] = useState<Instrument[]>(initialInstruments);
   const [search, setSearch] = useState("");
@@ -217,7 +219,7 @@ export function MarketSection({
           initialPrices={initialPrices}
           onPricesUpdate={handlePricesUpdate}
           onRefreshComplete={() => setChartRefreshKey((k) => k + 1)}
-          refreshInterval={15000}
+          refreshInterval={isBlitz ? 5000 : 15000}
         />
       </div>
 
