@@ -29,6 +29,7 @@ export type GameState = {
     totalValue: number;
     cash: number;
     displayName: string | null;
+    avatar: string | null;
     pnl: number;
     pnlPct: number;
   }[];
@@ -72,7 +73,7 @@ export async function getGameState(
 
   const { data: players } = await supabase
     .from("game_players")
-    .select("user_id, cash, display_name")
+    .select("user_id, cash, display_name, avatar")
     .eq("game_id", gameId);
 
   const myPlayer = players?.find((p) => p.user_id === userId);
@@ -211,6 +212,7 @@ export async function getGameState(
       cash: Number(p.cash),
       totalValue: value,
       displayName: (p as { display_name?: string | null }).display_name?.trim() || null,
+      avatar: (p as { avatar?: string | null }).avatar?.trim() || null,
       pnl,
       pnlPct,
     };

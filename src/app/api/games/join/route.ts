@@ -46,7 +46,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.redirect(new URL(`/games/${game.id}`, origin));
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name, avatar")
+    .eq("id", user.id)
+    .maybeSingle();
+
   const displayName =
+    profile?.display_name?.trim() ||
     (user.user_metadata?.full_name as string)?.trim() ||
     (user.email ?? "").split("@")[0] ||
     user.id.slice(0, 8);
@@ -56,6 +63,7 @@ export async function POST(request: NextRequest) {
     user_id: user.id,
     cash: game.initial_cash,
     display_name: displayName || null,
+    avatar: profile?.avatar || null,
   });
 
   if (playerError) {

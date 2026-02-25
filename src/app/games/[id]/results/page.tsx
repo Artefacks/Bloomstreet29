@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getGameState } from "@/lib/game-state";
 import { redirect } from "next/navigation";
+import { getAvatarEmoji } from "@/lib/avatars";
 
 type TradePnl = {
   orderId: string;
@@ -80,7 +81,8 @@ export default async function GameResultsPage({
           <ol className="bg-white border rounded-lg divide-y list-decimal list-inside">
             {state.leaderboard.map((entry, idx) => (
               <li key={entry.user_id} className="px-4 py-3 flex justify-between items-center">
-                <span>
+                <span className="flex items-center gap-2">
+                  <span>{getAvatarEmoji(entry.avatar)}</span>
                   {idx + 1}. {entry.user_id === user.id ? "Toi" : (entry.displayName ?? "Joueur " + entry.user_id.slice(0, 8))}
                 </span>
                 <span className="flex items-center gap-4">

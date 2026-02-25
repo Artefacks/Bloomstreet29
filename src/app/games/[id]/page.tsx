@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getGameState } from "@/lib/game-state";
 import { getCurrencyForSymbol, formatCurrency, FX_RATES_TO_CHF } from "@/lib/finnhub";
+import { getAvatarEmoji } from "@/lib/avatars";
 import { redirect } from "next/navigation";
 import { MarketSection } from "./MarketSection";
 import { EquityChart } from "./EquityChart";
@@ -181,6 +182,9 @@ export default async function GamePage({
                         idx === 0 ? "bg-amber-100 text-amber-700" : idx === 1 ? "bg-slate-200 text-slate-600" : idx === 2 ? "bg-orange-100 text-orange-600" : "text-slate-400"
                       }`}>
                         {idx + 1}
+                      </span>
+                      <span className="text-base" title={entry.avatar ?? undefined}>
+                        {getAvatarEmoji(entry.avatar)}
                       </span>
                       <span className="font-medium text-slate-800 text-sm">
                         {entry.user_id === user.id ? "Toi" : (entry.displayName ?? "Joueur")}
