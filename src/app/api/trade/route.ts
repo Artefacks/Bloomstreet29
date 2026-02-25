@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   // Load game settings
   const { data: gameRow } = await supabase
     .from("games")
-    .select("status, ends_at, fee_bps, allow_fractional, min_order_amount, game_mode")
+    .select("status, ends_at, started_at, fee_bps, allow_fractional, min_order_amount, game_mode")
     .eq("id", gameId)
     .single();
 
@@ -81,7 +81,8 @@ export async function POST(request: NextRequest) {
   }
 
   if (gameRow.game_mode === "blitz") {
-    const roundState = getBlitzRoundState(Date.now());
+    const startMs = gameRow.started_at ? new Date(gameRow.started_at).getTime() : null;
+    const roundState = getBlitzRoundState(Date.now(), startMs);
     if (!roundState.tradeOpen) {
       return redirectToGame(
         request,

@@ -13,8 +13,8 @@ const GAME_MODES = [
     initialCash: 100_000,
     feeBps: 10,
     leverage: 1,
-    description: "Partie traditionnelle sur une semaine. Idéal pour apprendre et prendre le temps d'analyser le marché.",
-    highlights: ["Prix réalistes", "Ordres limite", "Classement hebdo"],
+    description: "Mode calme pour apprendre et tester des stratégies sur plusieurs jours.",
+    highlights: ["Rythme tranquille", "Ordres limite", "Classement final"],
   },
   {
     id: "blitz",
@@ -25,8 +25,8 @@ const GAME_MODES = [
     initialCash: 50_000,
     feeBps: 0,
     leverage: 2,
-    description: "Mode éducatif rapide: Tech (volatil), Energy (intermédiaire), Bonds (stable). Parfait en solo ou entre amis.",
-    highlights: ["3 classes d'actifs", "Événements 6 min", "Signal partiel", "2× gains & pertes", "0 % frais"],
+    description: "Mode rapide en rounds: plus fun, plus nerveux, mais avec une vraie logique de jeu.",
+    highlights: ["Tech / Energy / Bonds", "Rounds de 6 min", "Signal de marché", "Levier 2×", "0 % frais"],
   },
 ] as const;
 
@@ -48,7 +48,7 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
             Créer une partie
           </h1>
           <p className="text-slate-600">
-            Choisis ton mode, invite tes amis avec le code, et bats-les sur le marché.
+            1) Choisis un mode. 2) Crée la partie. 3) Partage le code.
           </p>
         </div>
 
@@ -95,7 +95,7 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
         {/* Config card */}
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 mb-6">
           <h2 className="font-semibold text-slate-800 mb-4">
-            {mode === "blitz" ? "Paramètres Blitz" : "Personnaliser"}
+            {mode === "blitz" ? "Résumé du mode Blitz" : "Paramètres du mode Classique"}
           </h2>
 
           {mode === "classic" && (
@@ -136,8 +136,8 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
           {mode === "blitz" && (
             <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 mb-4">
               <p className="text-sm text-amber-800">
-                <strong>⚡ Blitz</strong> : 1h chrono, 50 000 CHF. 3 classes d&apos;actifs (Tech, Energy, Bonds),
-                événements toutes les 6 min, signal partiel, prix simulés et levier 2×.
+                <strong>⚡ Blitz</strong> : 1h, 50 000 CHF, 3 classes d&apos;actifs.
+                Chaque round dure 6 min avec un signal de marché. Objectif: réagir vite et garder une stratégie claire.
               </p>
             </div>
           )}
@@ -156,20 +156,14 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
                 bg-teal-600 hover:bg-teal-700 active:scale-[0.99]
                 shadow-lg shadow-teal-600/25 hover:shadow-xl"
             >
-              Créer la partie
+              Créer et lancer la partie
             </button>
           </form>
         </div>
 
-        {/* New player tip */}
-        <div className="bg-slate-100/80 rounded-xl p-4 mb-6">
-          <h3 className="font-medium text-slate-700 text-sm mb-2">Nouveau sur Bloomstreet ?</h3>
-          <ul className="text-xs text-slate-600 space-y-1">
-            <li>• Tu reçois un <strong>code à 6 caractères</strong> — partage-le pour inviter des amis</li>
-            <li>• Achète des actions au prix du marché ou place des ordres limite</li>
-            <li>• Le joueur avec le plus de valeur en portefeuille à la fin gagne</li>
-          </ul>
-        </div>
+        <p className="text-center text-xs text-slate-500 mb-6">
+          Après création, un code à 6 caractères s&apos;affiche pour inviter d&apos;autres joueurs.
+        </p>
 
         <p className="text-center text-sm text-slate-500">
           <Link href="/" className="text-teal-600 hover:underline font-medium">
