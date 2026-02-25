@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
 import { getAvatarEmoji } from "@/lib/avatars";
+import { ResetProfileButton } from "./components/ResetProfileButton";
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
@@ -64,10 +64,11 @@ export default async function HomePage() {
             Rejoindre une partie
           </Link>
         </div>
-        <div className="mt-8 flex items-center justify-center gap-4 text-sm">
+        <div className="mt-8 flex items-center justify-center gap-4 text-sm flex-wrap">
           <Link href="/profile/setup" className="text-gray-600 hover:text-gray-800 underline">
             Modifier mon profil
           </Link>
+          <ResetProfileButton />
           <form method="POST" action="/auth/logout" className="inline">
             <button type="submit" className="text-gray-600 hover:text-gray-800 underline">
               Déconnexion
