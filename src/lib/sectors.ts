@@ -91,6 +91,9 @@ const SYMBOL_SECTOR_MAP: Record<string, string> = {
   "MEME.BLITZ": "blitz", "MOON.BLITZ": "blitz", "PEPE.BLITZ": "blitz",
   "SHIB.BLITZ": "blitz", "WOOF.BLITZ": "blitz", "ROCKET.BLITZ": "blitz",
   "DIAMOND.BLITZ": "blitz", "YOLO.BLITZ": "blitz", "LAMBO.BLITZ": "blitz",
+  "PIZZA.BLITZ": "blitz", "NINJA.BLITZ": "blitz", "LASER.BLITZ": "blitz",
+  "ZOMBIE.BLITZ": "blitz", "UNICORN.BLITZ": "blitz", "TURBO.BLITZ": "blitz",
+  "SPACE.BLITZ": "blitz", "CHAOS.BLITZ": "blitz",
 };
 
 export function getSectorForSymbol(symbol: string): Sector | null {

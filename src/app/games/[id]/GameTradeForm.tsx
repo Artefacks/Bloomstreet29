@@ -81,6 +81,7 @@ type Props = {
   myCash: number;
   feeBps: number;
   gameEnded?: boolean;
+  tradingLockedReason?: string;
   allowFractional?: boolean;
   fxRate?: number; // currency → CHF rate
   tick?: number; // optionnel : tick partagé avec le graphique (toutes les 5s)
@@ -90,7 +91,7 @@ const CONFIRM_THRESHOLD_PCT = 0.2; // Demander confirmation si > 20% du cash/pos
 
 export function GameTradeForm({
   gameId, symbol, price, currency, hasPosition, positionQty, avgCost,
-  myCash, feeBps, gameEnded = false, allowFractional = true, fxRate = 1, tick: tickProp,
+  myCash, feeBps, gameEnded = false, tradingLockedReason, allowFractional = true, fxRate = 1, tick: tickProp,
 }: Props) {
   const [orderType, setOrderType] = useState<OrderType>("market");
   const [limitPrice, setLimitPrice] = useState("");
@@ -144,6 +145,7 @@ export function GameTradeForm({
 
   const canBuy = preview != null && preview.newCash >= 0 && qtyFinal > 0;
   const canSell = preview != null && qtyFinal > 0 && qtyFinal <= positionQty;
+  const tradingLocked = !!tradingLockedReason;
 
   // Faut-il demander confirmation ? (gros ordres)
   const needsConfirmation = preview != null && qtyFinal > 0 && (
@@ -195,6 +197,11 @@ export function GameTradeForm({
       )}
 
       {/* ──── Side ──── */}
+      {tradingLockedReason && (
+        <div className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-200">
+          {tradingLockedReason}
+        </div>
+      )}
       <div className="flex rounded-lg overflow-hidden border border-slate-200">
         <button type="button" onClick={() => setSide("buy")}
           className={`flex-1 py-2 text-sm font-medium transition-colors ${side === "buy" ? "bg-green-600 text-white" : "bg-white text-slate-600 hover:bg-green-50"}`}>
@@ -339,7 +346,7 @@ export function GameTradeForm({
           <input type="hidden" name="limitPrice" value={execPrice} />
         )}
         <button type="submit"
-          disabled={gameEnded || qtyFinal <= 0 || execPrice == null || (side === "buy" && !canBuy) || (side === "sell" && !canSell) || pendingSubmit}
+          disabled={gameEnded || tradingLocked || qtyFinal <= 0 || execPrice == null || (side === "buy" && !canBuy) || (side === "sell" && !canSell) || pendingSubmit}
           className={`w-full py-2.5 rounded-lg font-medium text-sm text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${side === "buy" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}`}>
           {pendingSubmit ? "Envoi…" : orderType === "limit"
             ? `Placer ordre limite ${side === "buy" ? "d'achat" : "de vente"} ${qtyFinal > 0 ? qtyFinal + " " + symbol : ""}`
