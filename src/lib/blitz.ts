@@ -90,11 +90,14 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
-export function getBlitzRoundState(timestampMs: number) {
+export function getBlitzRoundState(timestampMs: number, gameStartMs?: number | null) {
   const roundDurationMs = 6 * 60_000;
-  const tradeWindowMs = 45_000;
-  const roundIndex = Math.floor(timestampMs / roundDurationMs);
-  const roundStartMs = roundIndex * roundDurationMs;
+  // More playable than 45s: keep enough time to read + execute strategy
+  const tradeWindowMs = 3 * 60_000;
+  const anchor = gameStartMs && Number.isFinite(gameStartMs) ? gameStartMs : 0;
+  const elapsedSinceAnchor = Math.max(0, timestampMs - anchor);
+  const roundIndex = Math.floor(elapsedSinceAnchor / roundDurationMs);
+  const roundStartMs = anchor + roundIndex * roundDurationMs;
   const elapsedMs = timestampMs - roundStartMs;
   const tradeOpen = elapsedMs < tradeWindowMs;
   const tradeRemainingSec = Math.max(0, Math.ceil((tradeWindowMs - elapsedMs) / 1000));
@@ -167,6 +170,20 @@ export function getInsiderNextSignal(timestampMs: number): string {
   ];
   impacts.sort((a, b) => b.value - a.value);
   return `Signal avancé: ${getBlitzAssetClassLabel(impacts[0].key)} probable hausse`;
+}
+
+export function getBlitzActionHint(timestampMs: number): string {
+  const ev = getBlitzEvent(timestampMs);
+  const impacts = [
+    { key: "tech", value: ev.techImpact },
+    { key: "energy", value: ev.energyImpact },
+    { key: "bonds", value: ev.bondsImpact },
+  ] as Array<{ key: BlitzAssetClass; value: number }>;
+  impacts.sort((a, b) => b.value - a.value);
+
+  const longSide = getBlitzAssetClassLabel(impacts[0].key);
+  const weakSide = getBlitzAssetClassLabel(impacts[2].key);
+  return `Plan simple: surpondère ${longSide}, réduit ${weakSide}.`;
 }
 
 export function getDiversificationBonusPct(classCounts: Record<BlitzAssetClass, number>): number {

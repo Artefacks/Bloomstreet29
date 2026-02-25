@@ -20,6 +20,7 @@ import {
   getRoleDescription,
   getInsiderNextSignal,
   getDiversificationBonusPct,
+  getBlitzActionHint,
 } from "@/lib/blitz";
 
 type Instrument = {
@@ -37,6 +38,13 @@ function fmtCcy(currency: string): string {
     case "SEK": return "kr";
     default: return currency;
   }
+}
+
+function fmtPrice(n: number): string {
+  if (n >= 1000) return n.toFixed(2);
+  if (n >= 1) return n.toFixed(3);
+  if (n >= 0.1) return n.toFixed(4);
+  return n.toFixed(6);
 }
 
 type Position = {
@@ -70,6 +78,7 @@ export function MarketSection({
   isBlitz = false,
   userId,
   playerIds = [],
+  gameStartedAt,
 }: {
   gameId: string;
   instruments: Instrument[];
@@ -83,6 +92,7 @@ export function MarketSection({
   isBlitz?: boolean;
   userId?: string;
   playerIds?: string[];
+  gameStartedAt?: string | null;
 }) {
   const [instruments, setInstruments] = useState<Instrument[]>(initialInstruments);
   const [search, setSearch] = useState("");
@@ -225,7 +235,8 @@ export function MarketSection({
     : null;
   const blitzEvent = useMemo(() => (isBlitz ? getBlitzEvent(Date.now()) : null), [isBlitz]);
   const blitzSignal = useMemo(() => (isBlitz ? getBlitzSignal(Date.now()) : null), [isBlitz]);
-  const roundState = useMemo(() => (isBlitz ? getBlitzRoundState(Date.now()) : null), [isBlitz]);
+  const startMs = gameStartedAt ? new Date(gameStartedAt).getTime() : null;
+  const roundState = useMemo(() => (isBlitz ? getBlitzRoundState(Date.now(), startMs) : null), [isBlitz, startMs]);
   const role = useMemo(
     () => (isBlitz && userId ? getBlitzRole(gameId, userId, playerIds) : null),
     [isBlitz, userId, gameId, playerIds]
@@ -245,6 +256,7 @@ export function MarketSection({
     return mutable;
   }, [isBlitz, myPositions]);
   const xpBonusPct = useMemo(() => getDiversificationBonusPct(classCounts), [classCounts]);
+  const actionHint = useMemo(() => (isBlitz ? getBlitzActionHint(Date.now()) : null), [isBlitz]);
   const tradingLockedReason =
     isBlitz && roundState && !roundState.tradeOpen
       ? `Fenêtre de trading fermée. Prochain round dans ${roundState.roundRemainingSec}s.`
@@ -289,6 +301,7 @@ export function MarketSection({
           </div>
           <p className="text-amber-800 mt-1">{blitzEvent.description}</p>
           <p className="text-amber-900 mt-1 font-medium">Signal partiel: {blitzSignal}</p>
+          {actionHint && <p className="text-amber-900 mt-1 font-medium">{actionHint}</p>}
           {role && (
             <p className="text-amber-900 mt-1">
               Rôle: <strong>{role}</strong> — {getRoleDescription(role)}
@@ -407,7 +420,7 @@ export function MarketSection({
                       <>
                         {dir === "up" && <span className="text-green-500 text-[10px] mr-0.5">&#9650;</span>}
                         {dir === "down" && <span className="text-red-500 text-[10px] mr-0.5">&#9660;</span>}
-                        {inst.price.toFixed(2)} {fmtCcy(inst.currency)}
+                        {fmtPrice(inst.price)} {fmtCcy(inst.currency)}
                       </>
                     ) : "—"}
                   </td>

@@ -141,6 +141,7 @@ export default async function GamePage({
             isBlitz={isBlitz}
             userId={user.id}
             playerIds={state.players.map((p) => p.user_id)}
+            gameStartedAt={state.game.started_at}
           />
         </section>
 
