@@ -25,8 +25,8 @@ const GAME_MODES = [
     initialCash: 50_000,
     feeBps: 0,
     leverage: 2,
-    description: "1h de folie ! Bitcoin, crypto, meme coins… Faux cours, vrais frissons. Simple, rapide, fun.",
-    highlights: ["Bitcoin & crypto", "Prix simulés fun", "2× gains & pertes", "0 % frais"],
+    description: "Mode éducatif rapide: Tech (volatil), Energy (intermédiaire), Bonds (stable). Parfait en solo ou entre amis.",
+    highlights: ["3 classes d'actifs", "Événements 6 min", "Signal partiel", "2× gains & pertes", "0 % frais"],
   },
 ] as const;
 
@@ -136,8 +136,8 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
           {mode === "blitz" && (
             <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 mb-4">
               <p className="text-sm text-amber-800">
-                <strong>⚡ Blitz</strong> : 1h chrono, 50 000 CHF. Trade Bitcoin, Doge, Meme Coin… 
-                Marché 24/7, prix simulés, effet de levier 2×. C&apos;est simple et fun !
+                <strong>⚡ Blitz</strong> : 1h chrono, 50 000 CHF. 3 classes d&apos;actifs (Tech, Energy, Bonds),
+                événements toutes les 6 min, signal partiel, prix simulés et levier 2×.
               </p>
             </div>
           )}

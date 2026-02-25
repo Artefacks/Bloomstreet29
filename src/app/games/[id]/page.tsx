@@ -139,6 +139,8 @@ export default async function GamePage({
             symbolFromUrl={urlParams.symbol}
             pendingOrders={state.pendingOrders}
             isBlitz={isBlitz}
+            userId={user.id}
+            playerIds={state.players.map((p) => p.user_id)}
           />
         </section>
 

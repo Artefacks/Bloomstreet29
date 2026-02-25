@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseRouteClient } from "@/lib/supabase/route";
 import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
 import { recordEquitySnapshot } from "@/lib/equity-snapshot";
+import { getBlitzRoundState } from "@/lib/blitz";
 
 function redirectToGame(
   request: NextRequest,
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
   // Load game settings
   const { data: gameRow } = await supabase
     .from("games")
-    .select("status, ends_at, fee_bps, allow_fractional, min_order_amount")
+    .select("status, ends_at, fee_bps, allow_fractional, min_order_amount, game_mode")
     .eq("id", gameId)
     .single();
 
@@ -77,6 +78,19 @@ export async function POST(request: NextRequest) {
   const effectiveStatus = endsAt && new Date(endsAt) < new Date() ? "finished" : (gameRow.status ?? "active");
   if (effectiveStatus !== "active") {
     return redirectToGame(request, gameId, undefined, "Partie terminée.", symbol);
+  }
+
+  if (gameRow.game_mode === "blitz") {
+    const roundState = getBlitzRoundState(Date.now());
+    if (!roundState.tradeOpen) {
+      return redirectToGame(
+        request,
+        gameId,
+        undefined,
+        `Fenêtre de trading fermée. Reviens dans ${roundState.roundRemainingSec}s.`,
+        symbol
+      );
+    }
   }
 
   const feeBps = Number(gameRow.fee_bps ?? 10);
