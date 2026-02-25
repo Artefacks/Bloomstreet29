@@ -14,6 +14,8 @@ export type GameState = {
     fee_bps: number;
     allow_fractional: boolean;
     min_order_amount: number;
+    game_mode: "classic" | "blitz";
+    leverage_multiplier: number;
   } | null;
   players: { user_id: string; cash: number }[];
   myCash: number | null;
@@ -42,7 +44,7 @@ export async function getGameState(
 ): Promise<GameState> {
   const { data: game } = await supabase
     .from("games")
-    .select("id, join_code, duration_days, initial_cash, started_at, ends_at, status, fee_bps, allow_fractional, min_order_amount")
+    .select("id, join_code, duration_days, initial_cash, started_at, ends_at, status, fee_bps, allow_fractional, min_order_amount, game_mode, leverage_multiplier")
     .eq("id", gameId)
     .single();
 
@@ -86,6 +88,8 @@ export async function getGameState(
         fee_bps: Number(game.fee_bps ?? 10),
         allow_fractional: game.allow_fractional !== false,
         min_order_amount: Number(game.min_order_amount ?? 0),
+        game_mode: (game.game_mode as "classic" | "blitz") ?? "classic",
+        leverage_multiplier: Number(game.leverage_multiplier ?? 1),
       },
       players: players ?? [],
       myCash: null,
@@ -153,15 +157,17 @@ export async function getGameState(
 
   const { data: allPositions } = await supabase
     .from("positions")
-    .select("user_id, symbol, qty")
+    .select("user_id, symbol, qty, avg_cost")
     .eq("game_id", gameId);
 
-  const positionMap = new Map<string, { symbol: string; qty: number }[]>();
+  const positionMap = new Map<string, { symbol: string; qty: number; avg_cost: number }[]>();
   allPositions?.forEach((p) => {
     const list = positionMap.get(p.user_id) ?? [];
-    list.push({ symbol: p.symbol, qty: Number(p.qty) });
+    list.push({ symbol: p.symbol, qty: Number(p.qty), avg_cost: Number(p.avg_cost) });
     positionMap.set(p.user_id, list);
   });
+
+  const leverage = Number(game.leverage_multiplier ?? 1);
 
   // Reserved cash from open buy limit orders (ne compte pas comme P&L négatif)
   const { data: allPending } = await supabase
@@ -185,11 +191,15 @@ export async function getGameState(
     const reserved = reservedByUser.get(p.user_id) ?? 0;
     const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
     value += reserved + reserveFee;
-    posList.forEach(({ symbol, qty }) => {
+    posList.forEach(({ symbol, qty, avg_cost }) => {
       const pr = priceMap.get(symbol);
       if (pr != null) {
         const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(symbol));
-        value += qty * pr * fxRate;
+        const costBasis = qty * avg_cost * fxRate;
+        const marketValue = qty * pr * fxRate;
+        // Effet de levier : PnL amplifié (gains et pertes x leverage)
+        const positionValue = costBasis + (marketValue - costBasis) * leverage;
+        value += positionValue;
       }
     });
     const pnl = value - initialCash;
@@ -250,6 +260,8 @@ export async function getGameState(
       fee_bps: Number(game.fee_bps ?? 10),
       allow_fractional: game.allow_fractional !== false,
       min_order_amount: Number(game.min_order_amount ?? 0),
+      game_mode: (game.game_mode as "classic" | "blitz") ?? "classic",
+      leverage_multiplier: Number(game.leverage_multiplier ?? 1),
     },
     players: (players ?? []).map((p) => ({ user_id: p.user_id, cash: Number(p.cash) })),
     myCash: Number(myPlayer.cash),

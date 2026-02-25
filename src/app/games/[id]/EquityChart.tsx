@@ -20,6 +20,7 @@ type Props = {
   positions: Position[];
   currencyMap: Record<string, string>;
   fxRates: Record<string, number>;
+  leverageMultiplier?: number;
   refreshTrigger?: number;
 };
 
@@ -32,7 +33,7 @@ function toPoint(at: string, value: number): Point {
   };
 }
 
-export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, refreshTrigger }: Props) {
+export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, leverageMultiplier = 1, refreshTrigger }: Props) {
   const [history, setHistory] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveValue, setLiveValue] = useState<number | null>(null);
@@ -69,7 +70,9 @@ export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, r
           if (p != null) {
             const ccy = currencyMap[pos.symbol] ?? "USD";
             const rate = fxRates[ccy] ?? 1;
-            equity += pos.qty * Number(p) * rate;
+            const costBasis = pos.qty * pos.avg_cost * rate;
+            const marketValue = pos.qty * Number(p) * rate;
+            equity += costBasis + (marketValue - costBasis) * leverageMultiplier;
           }
         }
       }
@@ -79,7 +82,7 @@ export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, r
     } finally {
       fetchingRef.current = false;
     }
-  }, [symbols, positions, myCash, currencyMap, fxRates]);
+  }, [symbols, positions, myCash, currencyMap, fxRates, leverageMultiplier]);
 
   useEffect(() => {
     setLoading(true);

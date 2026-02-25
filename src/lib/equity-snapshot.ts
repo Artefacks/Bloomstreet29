@@ -4,6 +4,7 @@ import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
 /**
  * Enregistre un snapshot de la valorisation totale du joueur (pour le graphique d'évolution).
  * Appelé après chaque trade (marché ou limite).
+ * Prend en compte l'effet de levier (Blitz) si game.leverage_multiplier > 1.
  */
 export async function recordEquitySnapshot(
   supabase: SupabaseClient,
@@ -11,9 +12,16 @@ export async function recordEquitySnapshot(
   userId: string,
   cash: number
 ) {
+  const { data: game } = await supabase
+    .from("games")
+    .select("leverage_multiplier")
+    .eq("id", gameId)
+    .single();
+  const leverage = Number(game?.leverage_multiplier ?? 1);
+
   const { data: positions } = await supabase
     .from("positions")
-    .select("symbol, qty")
+    .select("symbol, qty, avg_cost")
     .eq("game_id", gameId)
     .eq("user_id", userId);
   const symbols = [...new Set((positions ?? []).map((p) => p.symbol))];
@@ -36,7 +44,12 @@ export async function recordEquitySnapshot(
     const pr = priceMap.get(p.symbol);
     if (pr != null) {
       const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(p.symbol));
-      totalValue += Number(p.qty) * pr * fxRate;
+      const qty = Number(p.qty);
+      const avgCost = Number(p.avg_cost);
+      const costBasis = qty * avgCost * fxRate;
+      const marketValue = qty * pr * fxRate;
+      const positionValue = costBasis + (marketValue - costBasis) * leverage;
+      totalValue += positionValue;
     }
   });
   await supabase.from("player_equity_snapshots").insert({

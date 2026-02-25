@@ -16,6 +16,7 @@ type Props = {
   initialPrices: Record<string, number | null>;
   currencyMap: Record<string, string>;
   fxRates: Record<string, number>; // currency → CHF rate
+  leverageMultiplier?: number;
 };
 
 function fmtCcy(c: string) {
@@ -26,7 +27,7 @@ function fmt(n: number, d = 2) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-export function PositionsCard({ gameId, positions, symbols, initialPrices, currencyMap, fxRates }: Props) {
+export function PositionsCard({ gameId, positions, symbols, initialPrices, currencyMap, fxRates, leverageMultiplier = 1 }: Props) {
   const [prices, setPrices] = useState<Record<string, number | null>>(initialPrices);
   const fetchingRef = useRef(false);
 
@@ -64,15 +65,17 @@ export function PositionsCard({ gameId, positions, symbols, initialPrices, curre
     return <p className="text-slate-400 text-sm">Aucune position.</p>;
   }
 
-  // Compute totals in CHF
+  // Compute totals in CHF (with leverage: PnL amplifié)
   let totalValueCHF = 0;
   let totalCostCHF = 0;
   for (const pos of positions) {
     const curPrice = prices[pos.symbol];
     const rate = fx(pos.symbol);
     if (curPrice != null) {
-      totalValueCHF += pos.qty * curPrice * rate;
-      totalCostCHF += pos.qty * pos.avg_cost * rate;
+      const costBasis = pos.qty * pos.avg_cost * rate;
+      const marketValue = pos.qty * curPrice * rate;
+      totalValueCHF += costBasis + (marketValue - costBasis) * leverageMultiplier;
+      totalCostCHF += costBasis;
     }
   }
   const totalPnl = totalValueCHF - totalCostCHF;
@@ -101,10 +104,10 @@ export function PositionsCard({ gameId, positions, symbols, initialPrices, curre
           const marketVal = curPrice != null ? pos.qty * curPrice : null;
           const marketValCHF = marketVal != null ? marketVal * rate : null;
           const costBasis = pos.qty * pos.avg_cost;
-          const pnl = marketVal != null ? marketVal - costBasis : null;
+          const pnl = marketVal != null ? (marketVal - costBasis) * leverageMultiplier : null;
           const pnlCHF = pnl != null ? pnl * rate : null;
           const pnlPct = pos.avg_cost > 0 && curPrice != null
-            ? ((curPrice - pos.avg_cost) / pos.avg_cost) * 100
+            ? ((curPrice - pos.avg_cost) / pos.avg_cost) * 100 * leverageMultiplier
             : null;
 
           return (

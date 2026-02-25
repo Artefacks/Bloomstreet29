@@ -15,6 +15,7 @@ type Props = {
   pendingOrders: PendingOrder[];
   currencyMap: Record<string, string>;
   feeBps: number;
+  leverageMultiplier?: number;
   onRefreshComplete?: () => void;
 };
 
@@ -32,6 +33,7 @@ export function PortfolioSummary({
   pendingOrders,
   currencyMap,
   feeBps,
+  leverageMultiplier = 1,
   onRefreshComplete,
 }: Props) {
   const router = useRouter();
@@ -92,7 +94,10 @@ export function PortfolioSummary({
   for (const pos of positions) {
     const pr = prices[pos.symbol];
     if (pr != null) {
-      totalValue += pos.qty * pr * fx(pos.symbol);
+      const costBasis = pos.qty * pos.avg_cost * fx(pos.symbol);
+      const marketValue = pos.qty * pr * fx(pos.symbol);
+      const positionValue = costBasis + (marketValue - costBasis) * leverageMultiplier;
+      totalValue += positionValue;
     }
   }
 

@@ -44,10 +44,11 @@ export default async function GameResultsPage({
   const endPriceMap = new Map<string, number>();
   endPricesRows?.forEach((r) => endPriceMap.set(r.symbol, Number(r.price)));
 
+  const leverage = state.game.leverage_multiplier ?? 1;
   const buyOrders = state.orders.filter((o) => o.side === "buy");
   const tradesWithPnl: TradePnl[] = buyOrders.map((o) => {
     const endPrice = endPriceMap.get(o.symbol);
-    const pnl = endPrice != null ? o.qty * (endPrice - o.price) : 0;
+    const pnl = endPrice != null ? o.qty * (endPrice - o.price) * leverage : 0;
     return {
       orderId: o.id,
       symbol: o.symbol,

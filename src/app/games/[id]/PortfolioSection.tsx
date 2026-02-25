@@ -15,6 +15,7 @@ type Props = {
   pendingOrders: PendingOrder[];
   currencyMap: Record<string, string>;
   feeBps: number;
+  leverageMultiplier?: number;
 };
 
 export function PortfolioSection(props: Props) {
@@ -28,6 +29,7 @@ export function PortfolioSection(props: Props) {
     <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
       <PortfolioSummary
         {...props}
+        leverageMultiplier={props.leverageMultiplier ?? 1}
         onRefreshComplete={handleRefreshComplete}
       />
       <div className="border-t border-slate-100 pt-2">
@@ -41,6 +43,7 @@ export function PortfolioSection(props: Props) {
             positions={props.positions}
             currencyMap={props.currencyMap}
             fxRates={{ CHF: 1, USD: 0.88, EUR: 0.94, SEK: 0.083 }}
+            leverageMultiplier={props.leverageMultiplier ?? 1}
             refreshTrigger={chartRefreshKey}
           />
         </div>

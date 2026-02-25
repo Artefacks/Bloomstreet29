@@ -28,14 +28,27 @@ export async function POST(request: NextRequest) {
   }
 
   const form = await request.formData();
+  const gameMode = (form.get("gameMode") as string) === "blitz" ? "blitz" : "classic";
+  const durationMinutesRaw = form.get("durationMinutes");
+  const durationMinutes = durationMinutesRaw && typeof durationMinutesRaw === "string"
+    ? Math.max(1, parseInt(durationMinutesRaw, 10) || 0)
+    : 0;
   const durationDaysRaw = form.get("durationDays");
-  const initialCashRaw = form.get("initialCash");
   const durationDays = durationDaysRaw && typeof durationDaysRaw === "string"
-    ? Math.max(1, parseInt(durationDaysRaw, 10) || 7)
+    ? Math.max(0, parseInt(durationDaysRaw, 10) || 7)
     : 7;
+  const initialCashRaw = form.get("initialCash");
   const initialCash = initialCashRaw && typeof initialCashRaw === "string"
     ? Math.max(0, parseFloat(initialCashRaw) || 100000)
     : 100000;
+  const leverageRaw = form.get("leverageMultiplier");
+  const leverageMultiplier = leverageRaw && typeof leverageRaw === "string"
+    ? Math.min(5, Math.max(1, parseFloat(leverageRaw) || 1))
+    : 1;
+  const feeBpsRaw = form.get("feeBps");
+  const feeBps = feeBpsRaw && typeof feeBpsRaw === "string"
+    ? Math.min(100, Math.max(0, parseInt(feeBpsRaw, 10) || 10))
+    : 10;
 
   let joinCode: string | null = null;
   for (let i = 0; i < 10; i++) {
@@ -56,22 +69,30 @@ export async function POST(request: NextRequest) {
   }
 
   const startedAt = new Date().toISOString();
-  const endsAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+  const endsAt = new Date(
+    gameMode === "blitz" && durationMinutes > 0
+      ? Date.now() + durationMinutes * 60 * 1000
+      : Date.now() + Math.max(1, durationDays) * 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  const insertPayload: Record<string, unknown> = {
+    join_code: joinCode,
+    duration_days: gameMode === "blitz" ? 0 : Math.max(1, durationDays),
+    initial_cash: initialCash,
+    created_by: user.id,
+    started_at: startedAt,
+    ends_at: endsAt,
+    status: "active",
+    fee_bps: feeBps,
+    allow_fractional: true,
+    min_order_amount: 0,
+    game_mode: gameMode,
+    leverage_multiplier: leverageMultiplier,
+  };
 
   const { data: game, error: gameError } = await supabase
     .from("games")
-    .insert({
-      join_code: joinCode,
-      duration_days: durationDays,
-      initial_cash: initialCash,
-      created_by: user.id,
-      started_at: startedAt,
-      ends_at: endsAt,
-      status: "active",
-      fee_bps: 10,
-      allow_fractional: true,
-      min_order_amount: 0,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 

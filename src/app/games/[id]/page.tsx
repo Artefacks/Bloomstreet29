@@ -7,6 +7,7 @@ import { MarketSection } from "./MarketSection";
 import { EquityChart } from "./EquityChart";
 import { PositionsCard } from "./PositionsCard";
 import { PortfolioSection } from "./PortfolioSection";
+import { GameCountdown } from "./GameCountdown";
 
 export default async function GamePage({
   params,
@@ -51,8 +52,11 @@ export default async function GamePage({
   const urlParams = await searchParams as { success?: string; error?: string; symbol?: string };
   const success = urlParams.success;
   const error = urlParams.error;
+  const isBlitz = state.game.game_mode === "blitz";
   const endDate = state.game.ends_at
-    ? new Date(state.game.ends_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+    ? isBlitz
+      ? null
+      : new Date(state.game.ends_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
     : null;
 
   const openPendingOrders = state.pendingOrders.filter((o) => o.status === "open");
@@ -67,14 +71,26 @@ export default async function GamePage({
               Bloomstreet29
             </Link>
             <div className="flex items-center gap-3 text-xs text-slate-300">
+              {isBlitz && (
+                <span className="px-2 py-0.5 rounded bg-amber-500/80 text-amber-950 font-bold text-[10px]">
+                  ⚡ BLITZ
+                </span>
+              )}
               <span>
                 Code : <strong className="font-mono text-white">{state.game.join_code}</strong>
               </span>
               {state.game.status === "finished" ? (
                 <span className="px-2 py-0.5 rounded bg-slate-600 text-[10px]">Terminee</span>
+              ) : isBlitz ? (
+                <span>
+                  Fin : <GameCountdown endsAt={state.game.ends_at} gameMode="blitz" />
+                </span>
               ) : endDate ? (
                 <span>Fin : {endDate}</span>
               ) : null}
+              {state.game.leverage_multiplier > 1 && (
+                <span className="text-amber-400 font-medium">{state.game.leverage_multiplier}× levier</span>
+              )}
               {state.game.fee_bps > 0 && (
                 <span className="text-slate-400">Frais : {(state.game.fee_bps / 100).toFixed(2)}%</span>
               )}
@@ -140,6 +156,7 @@ export default async function GamePage({
                 state.instruments.map((i) => [i.symbol, i.currency])
               )}
               feeBps={state.game.fee_bps}
+              leverageMultiplier={state.game.leverage_multiplier}
             />
           </div>
 
@@ -199,6 +216,7 @@ export default async function GamePage({
                   state.instruments.map((i) => [i.symbol, i.currency])
                 )}
                 fxRates={{ CHF: 1, USD: 0.88, EUR: 0.94, SEK: 0.083 }}
+                leverageMultiplier={state.game.leverage_multiplier}
               />
             </section>
 
