@@ -10,6 +10,18 @@ import { SectorOverview } from "./SectorOverview";
 import { SECTORS, getSectorForSymbol, getSectorId, getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
 import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
 import { tickOscillation } from "@/lib/price-oscillation";
+import {
+  getBlitzAssetClass,
+  getBlitzAssetClassLabel,
+  getBlitzEvent,
+  getBlitzSignal,
+  getBlitzRoundState,
+  getBlitzRole,
+  getRoleDescription,
+  getInsiderNextSignal,
+  getDiversificationBonusPct,
+  getBlitzActionHint,
+} from "@/lib/blitz";
 
 type Instrument = {
   symbol: string;
@@ -26,6 +38,13 @@ function fmtCcy(currency: string): string {
     case "SEK": return "kr";
     default: return currency;
   }
+}
+
+function fmtPrice(n: number): string {
+  if (n >= 1000) return n.toFixed(2);
+  if (n >= 1) return n.toFixed(3);
+  if (n >= 0.1) return n.toFixed(4);
+  return n.toFixed(6);
 }
 
 type Position = {
@@ -57,6 +76,9 @@ export function MarketSection({
   symbolFromUrl,
   pendingOrders = [],
   isBlitz = false,
+  userId,
+  playerIds = [],
+  gameStartedAt,
 }: {
   gameId: string;
   instruments: Instrument[];
@@ -68,6 +90,9 @@ export function MarketSection({
   symbolFromUrl?: string | null;
   pendingOrders?: PendingOrder[];
   isBlitz?: boolean;
+  userId?: string;
+  playerIds?: string[];
+  gameStartedAt?: string | null;
 }) {
   const [instruments, setInstruments] = useState<Instrument[]>(initialInstruments);
   const [search, setSearch] = useState("");
@@ -208,6 +233,34 @@ export function MarketSection({
   const selectedPosition = selectedSymbol
     ? myPositions.find((p) => p.symbol === selectedSymbol)
     : null;
+  const blitzEvent = useMemo(() => (isBlitz ? getBlitzEvent(Date.now()) : null), [isBlitz]);
+  const blitzSignal = useMemo(() => (isBlitz ? getBlitzSignal(Date.now()) : null), [isBlitz]);
+  const startMs = gameStartedAt ? new Date(gameStartedAt).getTime() : null;
+  const roundState = useMemo(() => (isBlitz ? getBlitzRoundState(Date.now(), startMs) : null), [isBlitz, startMs]);
+  const role = useMemo(
+    () => (isBlitz && userId ? getBlitzRole(gameId, userId, playerIds) : null),
+    [isBlitz, userId, gameId, playerIds]
+  );
+  const insiderHint = useMemo(
+    () => (isBlitz && role === "insider" ? getInsiderNextSignal(Date.now()) : null),
+    [isBlitz, role]
+  );
+  const classCounts = useMemo(() => {
+    const counts = { tech: 0, energy: 0, bonds: 0 } as const;
+    if (!isBlitz) return counts;
+    const mutable = { tech: 0, energy: 0, bonds: 0 };
+    myPositions.forEach((p) => {
+      const cls = getBlitzAssetClass(p.symbol);
+      mutable[cls] += 1;
+    });
+    return mutable;
+  }, [isBlitz, myPositions]);
+  const xpBonusPct = useMemo(() => getDiversificationBonusPct(classCounts), [classCounts]);
+  const actionHint = useMemo(() => (isBlitz ? getBlitzActionHint(Date.now()) : null), [isBlitz]);
+  const tradingLockedReason =
+    isBlitz && roundState && !roundState.tradeOpen
+      ? `Fenêtre de trading fermée. Prochain round dans ${roundState.roundRemainingSec}s.`
+      : undefined;
 
   return (
     <div className="space-y-4">
@@ -230,6 +283,42 @@ export function MarketSection({
         onSectorClick={setActiveSector}
         activeSector={activeSector}
       />
+
+      {isBlitz && blitzEvent && (
+        <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-200/70 text-amber-900 font-semibold">
+              Tour Blitz (6 min)
+            </span>
+            <span className="font-semibold text-amber-900">{blitzEvent.title}</span>
+            {roundState && (
+              <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                roundState.tradeOpen ? "bg-green-200/80 text-green-900" : "bg-slate-200 text-slate-700"
+              }`}>
+                {roundState.tradeOpen ? `Trading ON (${roundState.tradeRemainingSec}s)` : `Trading OFF (${roundState.roundRemainingSec}s)`}
+              </span>
+            )}
+          </div>
+          <p className="text-amber-800 mt-1">{blitzEvent.description}</p>
+          <p className="text-amber-900 mt-1 font-medium">Signal partiel: {blitzSignal}</p>
+          {actionHint && <p className="text-amber-900 mt-1 font-medium">{actionHint}</p>}
+          {role && (
+            <p className="text-amber-900 mt-1">
+              Rôle: <strong>{role}</strong> — {getRoleDescription(role)}
+            </p>
+          )}
+          {insiderHint && (
+            <p className="text-amber-900 mt-1 font-medium">{insiderHint}</p>
+          )}
+          <p className="text-amber-800 mt-1">
+            Diversification: Tech {classCounts.tech} / Energy {classCounts.energy} / Bonds {classCounts.bonds}
+            {" "}→ bonus XP {(xpBonusPct * 100).toFixed(0)}%
+          </p>
+          <p className="text-[11px] text-amber-700 mt-1">
+            Astuce stratégie: Tech = plus volatile, Energy = intermédiaire, Bonds = plus stable.
+          </p>
+        </div>
+      )}
 
       {/* News feed */}
       <NewsFeed
@@ -308,6 +397,11 @@ export function MarketSection({
                   <td className="px-3 py-2">
                     <div className="font-mono font-medium text-slate-800 text-[13px]">{inst.symbol}</div>
                     <div className="text-[11px] text-slate-500 truncate max-w-[140px]">{inst.name ?? ""}</div>
+                    {isBlitz && (
+                      <div className="text-[10px] text-amber-700">
+                        {getBlitzAssetClassLabel(getBlitzAssetClass(inst.symbol))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 hidden sm:table-cell">
                     {sector && (
@@ -326,7 +420,7 @@ export function MarketSection({
                       <>
                         {dir === "up" && <span className="text-green-500 text-[10px] mr-0.5">&#9650;</span>}
                         {dir === "down" && <span className="text-red-500 text-[10px] mr-0.5">&#9660;</span>}
-                        {inst.price.toFixed(2)} {fmtCcy(inst.currency)}
+                        {fmtPrice(inst.price)} {fmtCcy(inst.currency)}
                       </>
                     ) : "—"}
                   </td>
@@ -373,6 +467,7 @@ export function MarketSection({
           onClose={handleCloseDetail}
           chartRefreshKey={chartRefreshKey}
           pendingOrders={pendingOrders.filter((o) => o.symbol === selectedSymbol && o.status === "open")}
+          tradingLockedReason={tradingLockedReason}
         />
         </div>
       )}
@@ -383,7 +478,7 @@ export function MarketSection({
 /* ──── Detail panel when a stock is selected ──── */
 
 function DetailPanel({
-  gameId, inst, position, myCash, feeBps, gameEnded, allowFractional, onClose, chartRefreshKey, pendingOrders = [],
+  gameId, inst, position, myCash, feeBps, gameEnded, allowFractional, onClose, chartRefreshKey, pendingOrders = [], tradingLockedReason,
 }: {
   gameId: string;
   inst: { symbol: string; name: string | null; price: number | null; currency: string };
@@ -395,6 +490,7 @@ function DetailPanel({
   onClose: () => void;
   chartRefreshKey?: number;
   pendingOrders?: PendingOrder[];
+  tradingLockedReason?: string;
 }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -470,6 +566,7 @@ function DetailPanel({
           myCash={myCash}
           feeBps={feeBps}
           gameEnded={gameEnded}
+          tradingLockedReason={tradingLockedReason}
           allowFractional={allowFractional}
           fxRate={getExchangeRateToCHF(getCurrencyForSymbol(inst.symbol))}
         />

@@ -7,6 +7,7 @@ export type GameState = {
   game: {
     id: string;
     join_code: string;
+    started_at: string | null;
     duration_days: number;
     initial_cash: number;
     status: GameStatus;
@@ -82,6 +83,7 @@ export async function getGameState(
       game: {
         id: game.id,
         join_code: game.join_code,
+        started_at: game.started_at ?? null,
         duration_days: game.duration_days,
         initial_cash: initialCash,
         status: effectiveStatus,
@@ -272,6 +274,7 @@ export async function getGameState(
     game: {
       id: game.id,
       join_code: game.join_code,
+      started_at: game.started_at ?? null,
       duration_days: game.duration_days,
       initial_cash: initialCash,
       status: effectiveStatus,
