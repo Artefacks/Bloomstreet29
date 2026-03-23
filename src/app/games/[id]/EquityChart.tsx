@@ -23,6 +23,7 @@ type Props = {
   pendingOrders?: PendingOrder[];
   currencyMap: Record<string, string>;
   fxRates: Record<string, number>;
+  feeBps?: number;
   leverageMultiplier?: number;
   refreshTrigger?: number;
 };
@@ -36,7 +37,7 @@ function toPoint(at: string, value: number): Point {
   };
 }
 
-export function EquityChart({ gameId, myCash, positions, pendingOrders = [], currencyMap, fxRates, leverageMultiplier = 1, refreshTrigger }: Props) {
+export function EquityChart({ gameId, myCash, positions, pendingOrders = [], currencyMap, fxRates, feeBps = 10, leverageMultiplier = 1, refreshTrigger }: Props) {
   const [history, setHistory] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveValue, setLiveValue] = useState<number | null>(null);
@@ -67,7 +68,16 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], cur
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     try {
-      let equity = myCash;
+      // Réintégrer le cash réservé des ordres limite d'achat (comme PortfolioSummary / game-state)
+      const reserved = pendingOrders
+        .filter((o) => o.side === "buy")
+        .reduce((sum, o) => {
+          const ccy = currencyMap[o.symbol] ?? "USD";
+          const rate = fxRates[ccy] ?? 1;
+          return sum + o.limit_price * o.qty * rate;
+        }, 0);
+      const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
+      let equity = myCash + reserved + reserveFee;
       if (symbols.length > 0) {
         const res = await fetch(`/api/prices?symbols=${encodeURIComponent(symbols.join(","))}`);
         if (!res.ok) return;
@@ -100,7 +110,7 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], cur
     } finally {
       fetchingRef.current = false;
     }
-  }, [symbols, positions, pendingOrders, myCash, currencyMap, fxRates, leverageMultiplier]);
+  }, [symbols, positions, pendingOrders, myCash, currencyMap, fxRates, feeBps, leverageMultiplier]);
 
   useEffect(() => {
     setLoading(true);

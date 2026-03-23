@@ -47,6 +47,7 @@ export function PortfolioSection(props: Props) {
             pendingOrders={props.pendingOrders}
             currencyMap={props.currencyMap}
             fxRates={FX_RATES_TO_CHF}
+            feeBps={props.feeBps}
             leverageMultiplier={props.leverageMultiplier ?? 1}
             refreshTrigger={chartRefreshKey}
           />

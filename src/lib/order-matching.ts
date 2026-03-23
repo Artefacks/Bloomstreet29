@@ -113,20 +113,10 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
     const cash = Number(player.cash);
 
     if (order.side === "buy") {
-      const totalWithFee = totalCHF + feeAmount;
-      if (cash < totalWithFee) {
-        await supabase
-          .from("pending_orders")
-          .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
-          .eq("id", order.id);
-        continue;
-      }
-
-      // Execute buy (deduct CHF from cash)
-      const newCash = cash - totalWithFee;
-      await supabase.from("game_players").update({ cash: newCash }).eq("id", player.id);
-
-      // Update/create position
+      // Cash was ALREADY deducted when the limit order was placed (trade/route.ts).
+      // Do NOT deduct again here — the reserved amount becomes the position.
+      // (Do not check cash < totalWithFee: cash is post-reservation, so it would falsely cancel.)
+      // Update/create position (no cash change — already reserved at order creation)
       const { data: existingPos } = await supabase
         .from("positions")
         .select("id, qty, avg_cost")
@@ -173,7 +163,7 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
         })
         .eq("id", order.id);
 
-      await recordEquitySnapshot(supabase, order.game_id, order.user_id, newCash);
+      await recordEquitySnapshot(supabase, order.game_id, order.user_id, cash);
       filled++;
     } else {
       // Sell: shares were already reserved (position reduced) when the order was placed.
