@@ -53,8 +53,33 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
     const game = gameMap.get(order.game_id);
     if (!game) continue;
 
+    const limitPrice = Number(order.limit_price);
+    const qty = Number(order.qty);
+
     // Cancel if game is no longer active
     if (!game.active) {
+      if (order.side === "sell") {
+        // Restore reserved shares to position before cancelling
+        const { data: existingPos } = await supabase
+          .from("positions")
+          .select("id, qty, avg_cost")
+          .eq("game_id", order.game_id)
+          .eq("user_id", order.user_id)
+          .eq("symbol", order.symbol)
+          .maybeSingle();
+        if (existingPos) {
+          const newQty = Number(existingPos.qty) + qty;
+          await supabase.from("positions").update({ qty: newQty }).eq("id", existingPos.id);
+        } else {
+          await supabase.from("positions").insert({
+            game_id: order.game_id,
+            user_id: order.user_id,
+            symbol: order.symbol,
+            qty,
+            avg_cost: limitPrice,
+          });
+        }
+      }
       await supabase
         .from("pending_orders")
         .update({ status: "expired", cancelled_at: new Date().toISOString() })
@@ -62,8 +87,6 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
       continue;
     }
 
-    const limitPrice = Number(order.limit_price);
-    const qty = Number(order.qty);
     const eps = Math.max(0.0001, limitPrice * 0.0001); // tolérance arrondi
     const shouldFill =
       (order.side === "buy" && marketPrice <= limitPrice + eps) ||
@@ -153,33 +176,11 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
       await recordEquitySnapshot(supabase, order.game_id, order.user_id, newCash);
       filled++;
     } else {
-      // Sell
-      const { data: pos } = await supabase
-        .from("positions")
-        .select("id, qty")
-        .eq("game_id", order.game_id)
-        .eq("user_id", order.user_id)
-        .eq("symbol", order.symbol)
-        .single();
-
-      if (!pos || Number(pos.qty) < qty) {
-        await supabase
-          .from("pending_orders")
-          .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
-          .eq("id", order.id);
-        continue;
-      }
-
+      // Sell: shares were already reserved (position reduced) when the order was placed.
+      // We do NOT check position here - just credit cash and mark filled.
       const creditCHF = totalCHF - feeAmount;
       const newCash = cash + creditCHF;
       await supabase.from("game_players").update({ cash: newCash }).eq("id", player.id);
-
-      const newQty = Number(pos.qty) - qty;
-      if (newQty <= 0) {
-        await supabase.from("positions").delete().eq("id", pos.id);
-      } else {
-        await supabase.from("positions").update({ qty: newQty }).eq("id", pos.id);
-      }
 
       await supabase.from("orders").insert({
         game_id: order.game_id,

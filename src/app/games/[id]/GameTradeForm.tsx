@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 
 /* ──── PRNG helpers ──── */
 
@@ -98,6 +98,7 @@ export function GameTradeForm({
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [internalTick, setInternalTick] = useState(0);
   const [pendingSubmit, setPendingSubmit] = useState(false);
+  const submittingRef = useRef(false);
 
   const tick = tickProp ?? internalTick;
 
@@ -321,13 +322,14 @@ export function GameTradeForm({
         action="/api/trade"
         id="trade-form"
         onSubmit={(e) => {
-          if (needsConfirmation && !pendingSubmit) {
-            e.preventDefault();
-            if (confirm(`${side === "buy" ? "Achat" : "Vente"} de ${qtyFinal} ${symbol} pour ${preview?.totalCHF.toFixed(0)} CHF. Confirmer ?`)) {
-              setPendingSubmit(true);
-              (e.target as HTMLFormElement).submit();
-            }
+          e.preventDefault();
+          if (submittingRef.current) return;
+          if (needsConfirmation && !confirm(`${side === "buy" ? "Achat" : "Vente"} de ${qtyFinal} ${symbol} pour ${preview?.totalCHF.toFixed(0)} CHF. Confirmer ?`)) {
+            return;
           }
+          submittingRef.current = true;
+          setPendingSubmit(true);
+          (e.target as HTMLFormElement).submit();
         }}
       >
         <input type="hidden" name="gameId" value={gameId} />
