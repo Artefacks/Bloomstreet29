@@ -173,17 +173,24 @@ export async function getGameState(
   const leverage = Number(game.leverage_multiplier ?? 1);
 
   // Reserved cash from open buy limit orders (ne compte pas comme P&L négatif)
+  // Reserved shares from open sell limit orders (retirées des positions, à réintégrer au cours actuel)
   const { data: allPending } = await supabase
     .from("pending_orders")
     .select("user_id, symbol, side, qty, limit_price")
     .eq("game_id", gameId)
     .eq("status", "open");
   const reservedByUser = new Map<string, number>();
+  const reservedSellByUser = new Map<string, { symbol: string; qty: number }[]>();
   (allPending ?? []).forEach((o) => {
-    if (o.side !== "buy") return;
-    const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-    const reserved = Number(o.limit_price) * Number(o.qty) * fxRate;
-    reservedByUser.set(o.user_id, (reservedByUser.get(o.user_id) ?? 0) + reserved);
+    if (o.side === "buy") {
+      const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
+      const reserved = Number(o.limit_price) * Number(o.qty) * fxRate;
+      reservedByUser.set(o.user_id, (reservedByUser.get(o.user_id) ?? 0) + reserved);
+    } else {
+      const list = reservedSellByUser.get(o.user_id) ?? [];
+      list.push({ symbol: o.symbol, qty: Number(o.qty) });
+      reservedSellByUser.set(o.user_id, list);
+    }
   });
 
   const feeBps = Number(game.fee_bps ?? 10);
@@ -203,6 +210,14 @@ export async function getGameState(
         // Effet de levier : PnL amplifié (gains et pertes x leverage)
         const positionValue = costBasis + (marketValue - costBasis) * leverage;
         value += positionValue;
+      }
+    });
+    // Réintégrer les actions réservées (ordres limite vente) valorisées au cours actuel
+    (reservedSellByUser.get(p.user_id) ?? []).forEach(({ symbol, qty }) => {
+      const pr = priceMap.get(symbol);
+      if (pr != null) {
+        const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(symbol));
+        value += qty * pr * fxRate;
       }
     });
     const pnl = value - initialCash;
