@@ -44,6 +44,7 @@ export function PortfolioSection(props: Props) {
             gameId={props.gameId}
             myCash={props.myCash}
             positions={props.positions}
+            pendingOrders={props.pendingOrders}
             currencyMap={props.currencyMap}
             fxRates={FX_RATES_TO_CHF}
             leverageMultiplier={props.leverageMultiplier ?? 1}

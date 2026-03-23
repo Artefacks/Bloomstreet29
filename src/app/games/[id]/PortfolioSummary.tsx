@@ -41,7 +41,10 @@ export function PortfolioSummary({
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  const symbols = [...new Set(positions.map((p) => p.symbol))];
+  const symbols = [...new Set([
+    ...positions.map((p) => p.symbol),
+    ...pendingOrders.filter((o) => o.side === "sell").map((o) => o.symbol),
+  ])];
   const fx = (sym: string) => FX_RATES_TO_CHF[currencyMap[sym] ?? "USD"] ?? 1;
 
   const fetchPrices = useCallback(async () => {
@@ -101,6 +104,15 @@ export function PortfolioSummary({
       totalValue += positionValue;
     }
   }
+  // Actions réservées (ordres limite vente) valorisées au cours actuel
+  pendingOrders
+    .filter((o) => o.side === "sell")
+    .forEach((o) => {
+      const pr = prices[o.symbol];
+      if (pr != null) {
+        totalValue += o.qty * pr * fx(o.symbol);
+      }
+    });
 
   const pnl = totalValue - initialCash;
   const pnlPct = initialCash > 0 ? (pnl / initialCash) * 100 : 0;

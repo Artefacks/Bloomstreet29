@@ -14,10 +14,13 @@ import {
 type Point = { at: string; value: number; date: string; label: string };
 type Position = { symbol: string; qty: number; avg_cost: number };
 
+type PendingOrder = { symbol: string; side: string; qty: number; limit_price: number };
+
 type Props = {
   gameId: string;
   myCash: number;
   positions: Position[];
+  pendingOrders?: PendingOrder[];
   currencyMap: Record<string, string>;
   fxRates: Record<string, number>;
   leverageMultiplier?: number;
@@ -33,13 +36,18 @@ function toPoint(at: string, value: number): Point {
   };
 }
 
-export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, leverageMultiplier = 1, refreshTrigger }: Props) {
+export function EquityChart({ gameId, myCash, positions, pendingOrders = [], currencyMap, fxRates, leverageMultiplier = 1, refreshTrigger }: Props) {
   const [history, setHistory] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveValue, setLiveValue] = useState<number | null>(null);
   const fetchingRef = useRef(false);
 
-  const symbols = useMemo(() => positions.map((p) => p.symbol), [positions]);
+  const symbols = useMemo(() => [
+    ...new Set([
+      ...positions.map((p) => p.symbol),
+      ...pendingOrders.filter((o) => o.side === "sell").map((o) => o.symbol),
+    ]),
+  ], [positions, pendingOrders]);
 
   // Fetch historical equity snapshots
   const fetchHistory = useCallback(async () => {
@@ -75,6 +83,16 @@ export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, l
             equity += costBasis + (marketValue - costBasis) * leverageMultiplier;
           }
         }
+        // Actions réservées (ordres limite vente) valorisées au cours actuel
+        for (const o of pendingOrders) {
+          if (o.side !== "sell") continue;
+          const p = pricesMap[o.symbol]?.price;
+          if (p != null) {
+            const ccy = currencyMap[o.symbol] ?? "USD";
+            const rate = fxRates[ccy] ?? 1;
+            equity += o.qty * Number(p) * rate;
+          }
+        }
       }
       setLiveValue(equity);
     } catch {
@@ -82,7 +100,7 @@ export function EquityChart({ gameId, myCash, positions, currencyMap, fxRates, l
     } finally {
       fetchingRef.current = false;
     }
-  }, [symbols, positions, myCash, currencyMap, fxRates, leverageMultiplier]);
+  }, [symbols, positions, pendingOrders, myCash, currencyMap, fxRates, leverageMultiplier]);
 
   useEffect(() => {
     setLoading(true);
