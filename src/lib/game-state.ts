@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
+import { getCurrencyForSymbol } from "@/lib/finnhub";
+import { getSectorId } from "@/lib/sectors";
+import { isSimulated } from "@/lib/price-sim";
 
 export type GameStatus = "pending" | "active" | "finished";
 
@@ -15,7 +17,7 @@ export type GameState = {
     fee_bps: number;
     allow_fractional: boolean;
     min_order_amount: number;
-    game_mode: "classic" | "blitz";
+    game_mode: "classic";
     leverage_multiplier: number;
   } | null;
   players: { user_id: string; cash: number }[];
@@ -91,7 +93,7 @@ export async function getGameState(
         fee_bps: Number(game.fee_bps ?? 10),
         allow_fractional: game.allow_fractional !== false,
         min_order_amount: Number(game.min_order_amount ?? 0),
-        game_mode: (game.game_mode as "classic" | "blitz") ?? "classic",
+        game_mode: "classic",
         leverage_multiplier: Number(game.leverage_multiplier ?? 1),
       },
       players: players ?? [],
@@ -114,24 +116,36 @@ export async function getGameState(
     .eq("game_id", gameId)
     .eq("user_id", userId);
 
-  const isBlitz = (game.game_mode as string) === "blitz";
   const { data: instruments } = await supabase
     .from("instruments")
-    .select("symbol, name, blitz_only")
-    .eq("blitz_only", isBlitz)
-    .limit(isBlitz ? 20 : 100);
+    .select("symbol, name")
+    .limit(100);
+  const visibleInstruments = (instruments ?? []).filter(
+    (i) => getSectorId(i.symbol) !== "other" && !isSimulated(i.symbol)
+  );
 
-  const symbols = instruments?.map((i) => i.symbol) ?? [];
+  const { data: allPositions } = await supabase
+    .from("positions")
+    .select("user_id, symbol, qty, avg_cost")
+    .eq("game_id", gameId);
+
+  const valuationSymbols = [
+    ...new Set([
+      ...visibleInstruments.map((i) => i.symbol),
+      ...(allPositions ?? []).map((p) => p.symbol),
+    ]),
+  ];
+
   const { data: prices } = await supabase
     .from("prices_latest")
     .select("symbol, price")
-    .in("symbol", symbols.length ? symbols : ["__none__"]);
+    .in("symbol", valuationSymbols.length ? valuationSymbols : ["__none__"]);
 
   const priceMap = new Map<string, number>();
   prices?.forEach((p) => priceMap.set(p.symbol, Number(p.price)));
 
   // Fallback: pour les symboles sans prix (ex. suisses/européens), utiliser le dernier prix connu dans price_history
-  const missingSymbols = symbols.filter((s) => !priceMap.has(s));
+  const missingSymbols = valuationSymbols.filter((s) => !priceMap.has(s));
   if (missingSymbols.length > 0) {
     const { data: historyRows } = await supabase
       .from("price_history")
@@ -147,7 +161,7 @@ export async function getGameState(
     });
   }
 
-  const instrumentsWithPrice = (instruments ?? []).map((i) => ({
+  const instrumentsWithPrice = visibleInstruments.map((i) => ({
     symbol: i.symbol,
     name: i.name,
     price: priceMap.get(i.symbol) ?? null,
@@ -160,11 +174,6 @@ export async function getGameState(
     avg_cost: Number(p.avg_cost),
   }));
 
-  const { data: allPositions } = await supabase
-    .from("positions")
-    .select("user_id, symbol, qty, avg_cost")
-    .eq("game_id", gameId);
-
   const positionMap = new Map<string, { symbol: string; qty: number; avg_cost: number }[]>();
   allPositions?.forEach((p) => {
     const list = positionMap.get(p.user_id) ?? [];
@@ -174,52 +183,17 @@ export async function getGameState(
 
   const leverage = Number(game.leverage_multiplier ?? 1);
 
-  // Reserved cash from open buy limit orders (ne compte pas comme P&L négatif)
-  // Reserved shares from open sell limit orders (retirées des positions, à réintégrer au cours actuel)
-  const { data: allPending } = await supabase
-    .from("pending_orders")
-    .select("user_id, symbol, side, qty, limit_price")
-    .eq("game_id", gameId)
-    .eq("status", "open");
-  const reservedByUser = new Map<string, number>();
-  const reservedSellByUser = new Map<string, { symbol: string; qty: number }[]>();
-  (allPending ?? []).forEach((o) => {
-    if (o.side === "buy") {
-      const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-      const reserved = Number(o.limit_price) * Number(o.qty) * fxRate;
-      reservedByUser.set(o.user_id, (reservedByUser.get(o.user_id) ?? 0) + reserved);
-    } else {
-      const list = reservedSellByUser.get(o.user_id) ?? [];
-      list.push({ symbol: o.symbol, qty: Number(o.qty) });
-      reservedSellByUser.set(o.user_id, list);
-    }
-  });
-
-  const feeBps = Number(game.fee_bps ?? 10);
   const leaderboard = (players ?? []).map((p) => {
     const posList = positionMap.get(p.user_id) ?? [];
-    let value = Number(p.cash); // cash déjà déduit des réserves
-    // Réintégrer la réserve des ordres limite d'achat pour le calcul P&L (comme les apps bancaires)
-    const reserved = reservedByUser.get(p.user_id) ?? 0;
-    const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
-    value += reserved + reserveFee;
+    let value = Number(p.cash);
     posList.forEach(({ symbol, qty, avg_cost }) => {
       const pr = priceMap.get(symbol);
       if (pr != null) {
-        const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(symbol));
-        const costBasis = qty * avg_cost * fxRate;
-        const marketValue = qty * pr * fxRate;
+        const costBasis = qty * avg_cost;
+        const marketValue = qty * pr;
         // Effet de levier : PnL amplifié (gains et pertes x leverage)
         const positionValue = costBasis + (marketValue - costBasis) * leverage;
         value += positionValue;
-      }
-    });
-    // Réintégrer les actions réservées (ordres limite vente) valorisées au cours actuel
-    (reservedSellByUser.get(p.user_id) ?? []).forEach(({ symbol, qty }) => {
-      const pr = priceMap.get(symbol);
-      if (pr != null) {
-        const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(symbol));
-        value += qty * pr * fxRate;
       }
     });
     const pnl = value - initialCash;
@@ -246,30 +220,6 @@ export async function getGameState(
     .order("created_at", { ascending: false })
     .limit(100);
 
-  // Pending limit orders
-  let pendingOrdersRaw: { id: string; symbol: string; side: string; qty: number; limit_price: number; status: string; created_at: string }[] = [];
-  try {
-    const { data: po } = await supabase
-      .from("pending_orders")
-      .select("id, symbol, side, qty, limit_price, status, created_at")
-      .eq("game_id", gameId)
-      .eq("user_id", userId)
-      .in("status", ["open", "filled"])
-      .order("created_at", { ascending: false })
-      .limit(50);
-    pendingOrdersRaw = (po ?? []).map((o) => ({
-      id: o.id,
-      symbol: o.symbol,
-      side: o.side,
-      qty: Number(o.qty),
-      limit_price: Number(o.limit_price),
-      status: o.status,
-      created_at: o.created_at,
-    }));
-  } catch {
-    // Table might not exist yet
-  }
-
   return {
     game: {
       id: game.id,
@@ -282,7 +232,7 @@ export async function getGameState(
       fee_bps: Number(game.fee_bps ?? 10),
       allow_fractional: game.allow_fractional !== false,
       min_order_amount: Number(game.min_order_amount ?? 0),
-      game_mode: (game.game_mode as "classic" | "blitz") ?? "classic",
+      game_mode: "classic",
       leverage_multiplier: Number(game.leverage_multiplier ?? 1),
     },
     players: (players ?? []).map((p) => ({ user_id: p.user_id, cash: Number(p.cash) })),
@@ -302,7 +252,7 @@ export async function getGameState(
       fee_amount: Number((o as { fee_amount?: number }).fee_amount ?? 0),
       created_at: o.created_at,
     })),
-    pendingOrders: pendingOrdersRaw,
+    pendingOrders: [],
     isMember: true,
   };
 }

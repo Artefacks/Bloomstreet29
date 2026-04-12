@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-export function GameCountdown({ endsAt, gameMode }: { endsAt: string | null; gameMode: "classic" | "blitz" }) {
+export function GameCountdown({ endsAt }: { endsAt: string | null }) {
   const [remaining, setRemaining] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
 
@@ -25,7 +25,7 @@ export function GameCountdown({ endsAt, gameMode }: { endsAt: string | null; gam
       const mins = Math.floor((totalSec % 3600) / 60);
       const secs = totalSec % 60;
 
-      if (gameMode === "blitz" || hours === 0) {
+      if (hours === 0) {
         setRemaining(`${mins}:${secs.toString().padStart(2, "0")}`);
       } else {
         setRemaining(`${hours}h ${mins}m`);
@@ -35,12 +35,12 @@ export function GameCountdown({ endsAt, gameMode }: { endsAt: string | null; gam
     update();
     const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
-  }, [endsAt, gameMode]);
+  }, [endsAt]);
 
   if (!remaining) return null;
 
   return (
-    <span className={finished ? "text-slate-400" : gameMode === "blitz" ? "font-mono font-bold text-amber-400 animate-pulse" : ""}>
+    <span className={finished ? "text-slate-400" : ""}>
       {remaining}
     </span>
   );

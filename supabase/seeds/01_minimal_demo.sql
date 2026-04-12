@@ -1,5 +1,5 @@
--- Seed instruments et prix initiaux pour tests
--- Dans Supabase SQL Editor: coller et exécuter
+-- Bloomstreet — seed 01 : démo minimale (5 titres US + prix)
+-- Exécution : Supabase SQL Editor (manuel). Ordre recommandé : 01 → 02 → 03 si besoin.
 
 -- Insérer les instruments
 insert into public.instruments (symbol, name) values

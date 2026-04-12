@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchQuote, batchProcess } from "@/lib/finnhub";
-import { isSimulated, simulatePrice } from "@/lib/price-sim";
+import { isSimulated } from "@/lib/price-sim";
 import { getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
 import { matchPendingOrders } from "@/lib/order-matching";
 import { getSymbolsWithRecentHistory } from "@/lib/price-history";
 
-/** Micro-oscillation déterministe pour les actions US (±0.08%) — simule les petits mouvements réels, aide les ordres limite */
+/** Micro-oscillation déterministe pour les actions US (±0.08%). */
 function usPriceOscillation(price: number, symbol: string, timestampMs: number): number {
   const minute = Math.floor(timestampMs / 60_000);
   let h = 0;
@@ -34,9 +34,8 @@ type Inst = {
 /**
  * POST /api/prices/refresh-public
  *
- * Hybrid strategy:
+ * US strategy:
  *  - US stocks → real Finnhub Quote (batched, rate-limited)
- *  - International stocks → deterministic simulation from last known price
  */
 export async function POST(request: NextRequest) {
   try {
@@ -78,47 +77,10 @@ export async function POST(request: NextRequest) {
   const allSymbols = list.map((i) => i.symbol);
   const recentHistory = await getSymbolsWithRecentHistory(supabase, allSymbols);
 
-  // Load current prices for simulated stocks (need last price as base)
-  const simSymbols = list.filter((i) => isSimulated(i.symbol)).map((i) => i.symbol);
-  const priceMap = new Map<string, number>();
-
-  if (simSymbols.length > 0) {
-    const { data: currentPrices } = await supabase
-      .from("prices_latest")
-      .select("symbol, price")
-      .in("symbol", simSymbols);
-    currentPrices?.forEach((p) => priceMap.set(p.symbol, Number(p.price)));
-  }
-
   const now = Date.now();
   const nowISO = new Date(now).toISOString();
   let updatedReal = 0;
-  let updatedSim = 0;
-
-  // ─── 1. Simulate international stocks (instant, no API calls) ───
-  for (const inst of list) {
-    if (!isSimulated(inst.symbol)) continue;
-
-    const lastPrice = priceMap.get(inst.symbol);
-    if (lastPrice == null || lastPrice <= 0) continue; // no seed price yet → skip
-
-    const seedPrice = inst.seed_price ? Number(inst.seed_price) : undefined;
-    const newPrice = simulatePrice(lastPrice, inst.symbol, now, seedPrice, inst.exchange_suffix);
-
-    const { error: upsertErr } = await supabase.from("prices_latest").upsert(
-      { symbol: inst.symbol, price: newPrice, as_of: nowISO, source: "sim" },
-      { onConflict: "symbol" }
-    );
-    if (!upsertErr) {
-      updatedSim++;
-      if (!recentHistory.has(inst.symbol)) {
-        await supabase.from("price_history").insert({ symbol: inst.symbol, price: newPrice, as_of: nowISO });
-        recentHistory.add(inst.symbol);
-      }
-    }
-  }
-
-  // ─── 2. Fetch US stocks from Finnhub (batched) ───
+  // ─── Fetch US stocks from Finnhub (batched) ───
   const usStocks = finnhubKey ? list.filter((i) => !isSimulated(i.symbol)) : [];
 
   const processUS = async (inst: Inst) => {
@@ -149,18 +111,17 @@ export async function POST(request: NextRequest) {
 
   await batchProcess(usStocks, processUS, BATCH_SIZE, BATCH_DELAY_MS, MAX_DURATION_MS);
 
-  // Vérifier les ordres limite après mise à jour des prix
   try {
     await matchPendingOrders(supabase);
   } catch (e) {
-    console.warn("[prices/refresh-public] order matching:", e);
+    console.warn("[prices/refresh-public] matchPendingOrders:", e);
   }
 
   return NextResponse.json({
     ok: true,
-    updated: updatedReal + updatedSim,
+    updated: updatedReal,
     real: updatedReal,
-    simulated: updatedSim,
+    simulated: 0,
     us_total: usStocks.length,
     finnhub_configured: !!finnhubKey,
     total: list.length,

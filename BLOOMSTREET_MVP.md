@@ -40,7 +40,7 @@ PRICE_REFRESH_SECONDS=60
    - Vérifier la redirection vers `/games/[id]` avec le code d’invitation affiché.
 
 5. **Seed instruments + prix (SQL)**
-   - Dans Supabase → SQL Editor, exécuter le contenu de `supabase/seed_instruments.sql` pour créer des instruments (AAPL, MSFT, etc.).
+   - Dans Supabase → SQL Editor, exécuter les seeds dans l’ordre : `supabase/seeds/01_minimal_demo.sql` (démo rapide) ou `supabase/seeds/02_instruments_100.sql` (jeu complet), puis optionnellement `supabase/seeds/03_international_prices.sql`.
    - Pour tester le trading sans attendre le cron, insérer manuellement des lignes dans `prices_latest` :
      ```sql
      insert into public.prices_latest (symbol, price, as_of, source) values

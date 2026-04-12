@@ -29,11 +29,11 @@ export async function GET() {
     auth: { persistSession: false },
   });
 
-  // Récupérer les derniers prix pour AAPL et quelques autres
+  // Récupérer les derniers prix pour des symboles US
   const { data: prices } = await supabase
     .from("prices_latest")
     .select("symbol, price, as_of, source")
-    .in("symbol", ["AAPL", "MSFT", "NESN.SW"])
+    .in("symbol", ["AAPL", "MSFT", "NVDA"])
     .limit(10);
 
   const samplePrices = (prices ?? []).reduce(

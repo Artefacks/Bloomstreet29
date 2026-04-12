@@ -102,7 +102,7 @@ export default async function JoinGamePage({
             <div className="space-y-2">
               {visibleGames.map((game) => {
                 const isJoined = joinedSet.has(game.id);
-                const modeLabel = game.game_mode === "blitz" ? "⚡ Blitz" : "📈 Classique";
+                const modeLabel = "📈 Classique";
                 const endsAt =
                   game.ends_at && !Number.isNaN(new Date(game.ends_at).getTime())
                     ? new Date(game.ends_at).toLocaleString("fr-FR", {

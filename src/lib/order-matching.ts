@@ -1,20 +1,32 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
 import { recordEquitySnapshot } from "@/lib/equity-snapshot";
+import { getBidAsk } from "@/lib/bid-ask";
+import { getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
+
+type PendingRow = {
+  id: string;
+  game_id: string;
+  user_id: string;
+  symbol: string;
+  side: string;
+  qty: number;
+  limit_price: number;
+  created_at: string;
+  market_deferred?: boolean | null;
+};
 
 /**
  * Order matching engine.
- * Checks all open pending_orders against current prices.
- * Fills orders whose limit price has been reached.
+ * Aucun remplissage tant que la bourse du titre est fermée.
  *
- * Buy limit: fills when market price ≤ limit_price (buy at limit or better)
- * Sell limit: fills when market price ≥ limit_price (sell at limit or better)
+ * Ordre limite : achat si cours ≤ limite, vente si cours ≥ limite.
+ * Ordre au marché différé (market_deferred) : exécution au bid/ask courant dès l’ouverture.
  */
 export async function matchPendingOrders(supabase: SupabaseClient) {
   // 1. Load all open pending orders
   const { data: pendingOrders, error: poErr } = await supabase
     .from("pending_orders")
-    .select("id, game_id, user_id, symbol, side, qty, limit_price, created_at")
+    .select("id, game_id, user_id, symbol, side, qty, limit_price, created_at, market_deferred")
     .eq("status", "open")
     .limit(500);
 
@@ -46,20 +58,32 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
 
   let filled = 0;
 
-  for (const order of pendingOrders) {
-    const marketPrice = priceMap.get(order.symbol);
-    if (marketPrice == null) continue;
-
+  for (const order of pendingOrders as PendingRow[]) {
     const game = gameMap.get(order.game_id);
     if (!game) continue;
 
     const limitPrice = Number(order.limit_price);
     const qty = Number(order.qty);
+    const feeBps = game.fee_bps;
 
-    // Cancel if game is no longer active
+    // Partie terminée : rembourser l'achat (cash réservé) ou rendre les titres (vente)
     if (!game.active) {
-      if (order.side === "sell") {
-        // Restore reserved shares to position before cancelling
+      const { data: player } = await supabase
+        .from("game_players")
+        .select("id, cash")
+        .eq("game_id", order.game_id)
+        .eq("user_id", order.user_id)
+        .maybeSingle();
+
+      if (order.side === "buy" && player) {
+        const reserveTotal = qty * limitPrice;
+        const reserveFee = Math.min(15, Math.round((reserveTotal * feeBps) / 10000 * 100) / 100);
+        const refund = reserveTotal + reserveFee;
+        await supabase
+          .from("game_players")
+          .update({ cash: Number(player.cash) + refund })
+          .eq("id", player.id);
+      } else if (order.side === "sell") {
         const { data: existingPos } = await supabase
           .from("positions")
           .select("id, qty, avg_cost")
@@ -80,6 +104,7 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
           });
         }
       }
+
       await supabase
         .from("pending_orders")
         .update({ status: "expired", cancelled_at: new Date().toISOString() })
@@ -87,19 +112,29 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
       continue;
     }
 
-    const eps = Math.max(0.0001, limitPrice * 0.0001); // tolérance arrondi
-    const shouldFill =
-      (order.side === "buy" && marketPrice <= limitPrice + eps) ||
-      (order.side === "sell" && marketPrice >= limitPrice - eps);
+    const marketPrice = priceMap.get(order.symbol);
+    if (marketPrice == null) continue;
 
-    if (!shouldFill) continue;
+    const exchange = getExchangeForSymbol(order.symbol);
+    if (!isMarketOpen(exchange).open) continue;
 
-    // Execute at limit price (you get your price or better)
-    const fillPrice = limitPrice;
-    const total = qty * fillPrice; // in instrument currency
-    const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(order.symbol));
-    const totalCHF = total * fxRate;
-    const feeAmount = Math.min(15, Math.round((totalCHF * game.fee_bps) / 10000 * 100) / 100);
+    const marketDeferred = order.market_deferred === true;
+    let fillPrice: number;
+
+    if (marketDeferred) {
+      const { bid, ask } = getBidAsk(marketPrice);
+      fillPrice = order.side === "buy" ? ask : bid;
+    } else {
+      const eps = Math.max(0.0001, limitPrice * 0.0001);
+      const shouldFill =
+        (order.side === "buy" && marketPrice <= limitPrice + eps) ||
+        (order.side === "sell" && marketPrice >= limitPrice - eps);
+      if (!shouldFill) continue;
+      fillPrice = limitPrice;
+    }
+
+    const totalUsd = qty * fillPrice;
+    const feeAmount = Math.min(15, Math.round((totalUsd * feeBps) / 10000 * 100) / 100);
 
     // Load player cash
     const { data: player } = await supabase
@@ -113,10 +148,20 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
     const cash = Number(player.cash);
 
     if (order.side === "buy") {
-      // Cash was ALREADY deducted when the limit order was placed (trade/route.ts).
-      // Do NOT deduct again here — the reserved amount becomes the position.
-      // (Do not check cash < totalWithFee: cash is post-reservation, so it would falsely cancel.)
-      // Update/create position (no cash change — already reserved at order creation)
+      let cashAfterBuy = cash;
+      // Cash déjà déduit à la création (limit_price = ask de référence si market_deferred).
+      if (marketDeferred) {
+        const ask0 = limitPrice;
+        const feeReserved = Math.min(15, Math.round((qty * ask0 * feeBps) / 10000 * 100) / 100);
+        const reserved = qty * ask0 + feeReserved;
+        const actual = qty * fillPrice + feeAmount;
+        const cashAdjust = reserved - actual;
+        if (cashAdjust !== 0) {
+          cashAfterBuy = cash + cashAdjust;
+          await supabase.from("game_players").update({ cash: cashAfterBuy }).eq("id", player.id);
+        }
+      }
+      // Update/create position
       const { data: existingPos } = await supabase
         .from("positions")
         .select("id, qty, avg_cost")
@@ -163,13 +208,13 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
         })
         .eq("id", order.id);
 
-      await recordEquitySnapshot(supabase, order.game_id, order.user_id, cash);
+      await recordEquitySnapshot(supabase, order.game_id, order.user_id, cashAfterBuy);
       filled++;
     } else {
       // Sell: shares were already reserved (position reduced) when the order was placed.
       // We do NOT check position here - just credit cash and mark filled.
-      const creditCHF = totalCHF - feeAmount;
-      const newCash = cash + creditCHF;
+      const creditUsd = totalUsd - feeAmount;
+      const newCash = cash + creditUsd;
       await supabase.from("game_players").update({ cash: newCash }).eq("id", player.id);
 
       await supabase.from("orders").insert({

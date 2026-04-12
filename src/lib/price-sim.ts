@@ -14,7 +14,6 @@
  */
 
 import { getSectorId, getExchangeForSymbol, getExchangeBySuffix, isMarketOpenAt } from "./sectors";
-import { getBlitzAssetClass, getBlitzEvent, getBlitzEventImpact } from "./blitz";
 
 /* ──── Deterministic PRNG (mulberry32) ──── */
 
@@ -156,41 +155,7 @@ export function simulatePrice(
   const z = normalRandom(rng);
   const eventRoll = rng();
 
-  // Blitz mode éducatif: 3 classes d'actifs + mean reversion + choc événementiel (toutes les 6 min)
-  const isBlitz = symbol.endsWith(".BLITZ");
-  if (isBlitz) {
-    const assetClass = getBlitzAssetClass(symbol);
-    const event = getBlitzEvent(timestamp);
-    const eventImpact = getBlitzEventImpact(event, assetClass);
-
-    // Paramètres OU par classe (tech > energy > bonds en volatilité)
-    const classCfg =
-      assetClass === "tech"
-        ? { kappa: 0.26, sigma: 0.025 }
-        : assetClass === "energy"
-          ? { kappa: 0.32, sigma: 0.015 }
-          : { kappa: 0.42, sigma: 0.007 };
-
-    const mu = seedPrice && seedPrice > 0 ? seedPrice : lastPrice;
-    const deviation = (lastPrice - mu) / Math.max(mu, 0.01);
-
-    // OU discret: retour vers moyenne + bruit + effet événement + léger régime de trend
-    const meanRevert = -classCfg.kappa * deviation;
-    const stochastic = classCfg.sigma * z;
-    const trendComponent = eventImpact * 0.35;
-
-    // Choc appliqué surtout au début de fenêtre (minute multiple de 6)
-    const minute = Math.floor(timestamp / 60_000);
-    const isEventMinute = minute % 6 === 0;
-    const shock = isEventMinute ? eventImpact : eventImpact * 0.15;
-
-    const totalChange = meanRevert + stochastic + trendComponent + shock;
-    const bounded = Math.max(-0.22, Math.min(0.22, totalChange));
-    const next = lastPrice * (1 + bounded);
-    return Math.max(0.01, Math.round(next * 10000) / 10000);
-  }
-
-  // Hors Blitz: simulation classique actions internationales
+  // Simulation classique actions internationales
   const baseSigma = 0.005;
   const volMult = intradayVolMultiplier(timestamp);
   let sigma = baseSigma * volMult;

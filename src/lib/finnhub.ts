@@ -6,53 +6,14 @@
 const FINNHUB_QUOTE = "https://finnhub.io/api/v1/quote";
 const FINNHUB_SEARCH = "https://finnhub.io/api/v1/search";
 
-/* ──── Currency helpers ──── */
+/* ──── Currency helpers (jeu en USD uniquement, sans conversion) ──── */
 
-export function getCurrencyForSymbol(symbol: string): string {
-  if (symbol.endsWith(".BLITZ")) return "USD";
-  if (symbol.endsWith(".SW")) return "CHF";
-  if (symbol.endsWith(".ST")) return "SEK";
-  if (
-    symbol.endsWith(".PA") ||
-    symbol.endsWith(".DE") ||
-    symbol.endsWith(".AS") ||
-    symbol.endsWith(".MC") ||
-    symbol.endsWith(".MI") ||
-    symbol.endsWith(".HE")
-  )
-    return "EUR";
+export function getCurrencyForSymbol(_symbol: string): string {
   return "USD";
 }
 
 export function formatCurrency(currency: string): string {
-  switch (currency) {
-    case "CHF":
-      return "CHF";
-    case "EUR":
-      return "€";
-    case "USD":
-      return "$";
-    case "SEK":
-      return "kr";
-    default:
-      return currency;
-  }
-}
-
-/* ──── Exchange rates to CHF (approximate, updated periodically) ──── */
-export const FX_RATES_TO_CHF: Record<string, number> = {
-  CHF: 1,
-  USD: 0.88,
-  EUR: 0.94,
-  SEK: 0.083,
-};
-
-export function getExchangeRateToCHF(currency: string): number {
-  return FX_RATES_TO_CHF[currency] ?? 1;
-}
-
-export function convertToCHF(amount: number, currency: string): number {
-  return amount * getExchangeRateToCHF(currency);
+  return currency === "USD" ? "$" : currency;
 }
 
 /* ──── Types ──── */

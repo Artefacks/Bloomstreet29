@@ -11,6 +11,7 @@ export function LivePrices({
   onPricesUpdate,
   onRefreshComplete,
   refreshInterval = 15000,
+  refreshServerState = false,
 }: {
   symbols: string[];
   initialPrices: Record<string, number | null>;
@@ -18,6 +19,8 @@ export function LivePrices({
   /** Appelé après un refresh manuel réussi — permet de synchroniser les graphiques */
   onRefreshComplete?: () => void;
   refreshInterval?: number;
+  /** Si true, met aussi à jour les données serveur (classement, valeurs globales). */
+  refreshServerState?: boolean;
 }) {
   const router = useRouter();
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -42,6 +45,7 @@ export function LivePrices({
 
       onPricesUpdate(updatedPrices);
       setLastUpdate(new Date());
+      if (refreshServerState) router.refresh();
     } catch (error) {
       console.error("[LivePrices] fetch error:", error);
     } finally {
@@ -56,18 +60,16 @@ export function LivePrices({
       const data = await res.json();
       if (res.ok && data.ok) {
         console.log("[LivePrices] Refresh:", data);
-        // Feedback visible : X prix mis à jour (Y US, Z simulés)
+        // Feedback visible : X prix US mis à jour
         const msg = data.finnhub_configured
-          ? `${data.updated} prix mis à jour (${data.real} US, ${data.simulated} simulés)`
-          : data.simulated > 0
-            ? `${data.simulated} prix simulés mis à jour. Ajoute FINNHUB_API_KEY sur Vercel + redéploie pour les prix US.`
-            : "Aucun prix à mettre à jour. Vérifie /api/prices/debug";
+          ? `${data.updated} prix US mis à jour`
+          : "Aucun prix US mis à jour. Ajoute FINNHUB_API_KEY sur Vercel puis redéploie.";
         setLastUpdate(new Date());
         await fetchPrices();
         onRefreshComplete?.();
         // Notifier les autres composants (PortfolioSummary, EquityChart) pour synchroniser solde/graphique
         window.dispatchEvent(new CustomEvent("bloomstreet:prices-refreshed"));
-        // Rafraîchir les données serveur (positions, ordres) au cas où des ordres limite ont été exécutés
+        // Rafraîchir les données serveur (positions, classement)
         router.refresh();
         // Toast de feedback
         const toast = document.createElement("div");
@@ -107,7 +109,7 @@ export function LivePrices({
         onClick={refreshFromAPI}
         disabled={isRefreshing}
         className="px-2 py-1 text-xs bg-teal-100 text-teal-700 rounded hover:bg-teal-200 disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Rafraîchir les prix US (Finnhub) + simuler les internationaux"
+        title="Rafraîchir les prix US (Finnhub)"
       >
         {isRefreshing ? "..." : "Rafraîchir"}
       </button>

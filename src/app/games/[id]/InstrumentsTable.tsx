@@ -108,7 +108,7 @@ export function InstrumentsTable({
         </table>
       </div>
       {instruments.length === 0 && (
-        <p className="text-gray-500 py-2">Aucun instrument. Exécutez le seed SQL.</p>
+        <p className="text-gray-500 py-2">Aucun instrument. Exécutez un script dans <code className="text-xs">supabase/seeds/</code> (SQL Editor).</p>
       )}
     </section>
   );

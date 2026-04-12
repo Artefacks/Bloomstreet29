@@ -8,7 +8,6 @@
  * Nécessite .env.local avec SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL
  */
 import { createClient } from "@supabase/supabase-js";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "../src/lib/finnhub";
 
 const gameId = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
@@ -58,9 +57,8 @@ async function main() {
     const fillPrice = Number(o.fill_price ?? o.limit_price ?? 0);
     const qty = Number(o.qty);
     const feeAmount = Number(o.fee_amount ?? 0);
-    const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-    const totalCHF = qty * fillPrice * fxRate;
-    const toRefund = totalCHF + feeAmount;
+    const totalUsd = qty * fillPrice;
+    const toRefund = totalUsd + feeAmount;
     refundByUser.set(
       o.user_id,
       (refundByUser.get(o.user_id) ?? 0) + toRefund
@@ -81,7 +79,7 @@ async function main() {
       const newCash = currentCash + refund;
       const name = (player as { display_name?: string } | null)?.display_name ?? userId.slice(0, 8);
       console.log(
-        `  ${name}: ${currentCash.toFixed(2)} -> ${newCash.toFixed(2)} CHF (+${refund.toFixed(2)})`
+        `  ${name}: ${currentCash.toFixed(2)} -> ${newCash.toFixed(2)} USD (+${refund.toFixed(2)})`
       );
     }
     console.log("\nExécutez sans --dry-run pour appliquer les modifications.");
@@ -117,7 +115,7 @@ async function main() {
     }
 
     console.log(
-      `${name}: cash ${currentCash.toFixed(2)} -> ${newCash.toFixed(2)} CHF (+${refund.toFixed(2)})`
+      `${name}: cash ${currentCash.toFixed(2)} -> ${newCash.toFixed(2)} USD (+${refund.toFixed(2)})`
     );
     repaired++;
   }

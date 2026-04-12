@@ -12,7 +12,6 @@ import {
   type LineData,
   type Time,
   ColorType,
-  LineStyle,
 } from "lightweight-charts";
 import { getExchangeForSymbol, isMarketOpenAt } from "@/lib/sectors";
 
@@ -98,18 +97,14 @@ function toLineData(points: RawPoint[], candleMinutes: number, symbol: string): 
     .map(([time, value]) => ({ time: time as Time, value }));
 }
 
-type PendingOrder = { id: string; symbol: string; side: string; qty: number; limit_price: number };
-
 export function PriceChartSingle({
   symbol,
   displayPrice,
   refreshTrigger,
-  pendingOrders = [],
 }: {
   symbol: string;
   displayPrice?: number | null;
   refreshTrigger?: number;
-  pendingOrders?: PendingOrder[];
 }) {
   const [raw, setRaw] = useState<RawPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -251,20 +246,6 @@ export function PriceChartSingle({
       series.setData(lineData);
     }
 
-    // Lignes pour les ordres limite en attente
-    for (const order of pendingOrders) {
-      if (order.symbol !== symbol || order.limit_price <= 0) continue;
-      const isBuy = order.side === "buy";
-      series.createPriceLine({
-        price: order.limit_price,
-        color: isBuy ? "#16a34a" : "#dc2626",
-        lineWidth: 2,
-        lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: `${isBuy ? "ACH" : "VEN"} ${order.qty} @ ${order.limit_price.toFixed(2)}`,
-      });
-    }
-
     chart.timeScale().fitContent();
     chartRef.current = chart;
 
@@ -282,7 +263,7 @@ export function PriceChartSingle({
         chartRef.current = null;
       }
     };
-  }, [candles, lineData, mode, trend, pendingOrders, symbol]);
+  }, [candles, lineData, mode, trend, symbol]);
 
   if (!symbol) return null;
 

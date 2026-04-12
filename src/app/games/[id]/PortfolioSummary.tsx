@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrencyForSymbol, getExchangeRateToCHF, FX_RATES_TO_CHF } from "@/lib/finnhub";
 
 type Position = { symbol: string; qty: number; avg_cost: number };
 type PendingOrder = { symbol: string; side: string; qty: number; limit_price: number };
@@ -13,7 +12,6 @@ type Props = {
   myCash: number;
   positions: Position[];
   pendingOrders: PendingOrder[];
-  currencyMap: Record<string, string>;
   feeBps: number;
   leverageMultiplier?: number;
   onRefreshComplete?: () => void;
@@ -31,7 +29,6 @@ export function PortfolioSummary({
   myCash,
   positions,
   pendingOrders,
-  currencyMap,
   feeBps,
   leverageMultiplier = 1,
   onRefreshComplete,
@@ -45,8 +42,6 @@ export function PortfolioSummary({
     ...positions.map((p) => p.symbol),
     ...pendingOrders.filter((o) => o.side === "sell").map((o) => o.symbol),
   ])];
-  const fx = (sym: string) => FX_RATES_TO_CHF[currencyMap[sym] ?? "USD"] ?? 1;
-
   const fetchPrices = useCallback(async () => {
     if (symbols.length === 0) {
       setLoading(false);
@@ -85,21 +80,18 @@ export function PortfolioSummary({
     onRefreshComplete?.();
   };
 
-  // Reserved cash from open buy limit orders (réintégré dans le total, comme game-state)
+  // pendingOrders est désormais vide (ordres limite supprimés), gardé pour compatibilité.
   const reserved = pendingOrders
     .filter((o) => o.side === "buy")
-    .reduce((sum, o) => {
-      const rate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-      return sum + o.limit_price * o.qty * rate;
-    }, 0);
+    .reduce((sum, o) => sum + o.limit_price * o.qty, 0);
   const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
 
   let totalValue = myCash + reserved + reserveFee;
   for (const pos of positions) {
     const pr = prices[pos.symbol];
     if (pr != null) {
-      const costBasis = pos.qty * pos.avg_cost * fx(pos.symbol);
-      const marketValue = pos.qty * pr * fx(pos.symbol);
+      const costBasis = pos.qty * pos.avg_cost;
+      const marketValue = pos.qty * pr;
       const positionValue = costBasis + (marketValue - costBasis) * leverageMultiplier;
       totalValue += positionValue;
     }
@@ -110,7 +102,7 @@ export function PortfolioSummary({
     .forEach((o) => {
       const pr = prices[o.symbol];
       if (pr != null) {
-        totalValue += o.qty * pr * fx(o.symbol);
+        totalValue += o.qty * pr;
       }
     });
 
@@ -122,13 +114,13 @@ export function PortfolioSummary({
       <div>
         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cash</p>
         <p className="text-sm font-semibold text-slate-900 font-mono">
-          {fmt(myCash, 2)} CHF
+          {fmt(myCash, 2)} USD
         </p>
       </div>
       <div className="text-right">
         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">P&amp;L</p>
         <p className={`text-sm font-semibold font-mono ${pnl >= 0 ? "text-green-600" : "text-red-600"}`}>
-          {(pnl >= 0 ? "+" : "") + fmt(pnl, 2)} CHF
+          {(pnl >= 0 ? "+" : "") + fmt(pnl, 2)} USD
         </p>
         <p className="text-[10px] text-slate-500">
           {(pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(2)}%
@@ -137,7 +129,7 @@ export function PortfolioSummary({
       <div className="text-right">
         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Total</p>
         <p className="text-sm font-semibold text-slate-900 font-mono">
-          {loading && symbols.length > 0 && Object.keys(prices).length === 0 ? "…" : fmt(totalValue, 0)} CHF
+          {loading && symbols.length > 0 && Object.keys(prices).length === 0 ? "…" : fmt(totalValue, 0)} USD
         </p>
       </div>
       <button

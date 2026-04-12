@@ -1,10 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
 
 /**
  * Enregistre un snapshot de la valorisation totale du joueur (pour le graphique d'évolution).
  * Appelé après chaque trade (marché ou limite).
- * Prend en compte l'effet de levier (Blitz) si game.leverage_multiplier > 1.
+ * Prend en compte l'effet de levier si game.leverage_multiplier > 1.
  * Inclut le cash réservé (ordres limite d'achat) et les actions réservées (ordres limite vente).
  */
 export async function recordEquitySnapshot(
@@ -57,8 +56,7 @@ export async function recordEquitySnapshot(
   (pendingOrders ?? [])
     .filter((o) => o.side === "buy")
     .forEach((o) => {
-      const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-      reserved += Number(o.limit_price) * Number(o.qty) * fxRate;
+      reserved += Number(o.limit_price) * Number(o.qty);
     });
   const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
   totalValue += reserved + reserveFee;
@@ -67,11 +65,10 @@ export async function recordEquitySnapshot(
   positions?.forEach((p) => {
     const pr = priceMap.get(p.symbol);
     if (pr != null) {
-      const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(p.symbol));
       const qty = Number(p.qty);
       const avgCost = Number(p.avg_cost);
-      const costBasis = qty * avgCost * fxRate;
-      const marketValue = qty * pr * fxRate;
+      const costBasis = qty * avgCost;
+      const marketValue = qty * pr;
       const positionValue = costBasis + (marketValue - costBasis) * leverage;
       totalValue += positionValue;
     }
@@ -83,8 +80,7 @@ export async function recordEquitySnapshot(
     .forEach((o) => {
       const pr = priceMap.get(o.symbol);
       if (pr != null) {
-        const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-        totalValue += Number(o.qty) * pr * fxRate;
+        totalValue += Number(o.qty) * pr;
       }
     });
 

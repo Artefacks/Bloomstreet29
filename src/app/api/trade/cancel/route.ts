@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseRouteClient } from "@/lib/supabase/route";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
 
 /**
  * POST /api/trade/cancel
@@ -63,11 +62,9 @@ export async function POST(request: NextRequest) {
 
   // Refund
   if (order.side === "buy") {
-    const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(order.symbol));
     const reserveTotal = qty * limitPrice;
-    const reserveTotalCHF = reserveTotal * fxRate;
-    const reserveFee = Math.min(15, Math.round((reserveTotalCHF * feeBps) / 10000 * 100) / 100);
-    const refund = reserveTotalCHF + reserveFee;
+    const reserveFee = Math.min(15, Math.round((reserveTotal * feeBps) / 10000 * 100) / 100);
+    const refund = reserveTotal + reserveFee;
     const newCash = Number(player.cash) + refund;
     await supabase.from("game_players").update({ cash: newCash }).eq("id", player.id);
   } else {

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchQuote, batchProcess } from "@/lib/finnhub";
-import { isSimulated, simulatePrice } from "@/lib/price-sim";
-import { matchPendingOrders } from "@/lib/order-matching";
+import { isSimulated } from "@/lib/price-sim";
 import { getSymbolsWithRecentHistory } from "@/lib/price-history";
+import { matchPendingOrders } from "@/lib/order-matching";
 
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 5200;
@@ -19,7 +19,7 @@ type Inst = {
 
 /**
  * POST /api/prices/refresh   (cron, protected by CRON_SECRET)
- * Same hybrid logic: US real, international simulated.
+ * US only real-time prices from Finnhub.
  */
 export async function POST(request: NextRequest) {
   const cronSecret = request.headers.get("x-cron-secret");
@@ -64,41 +64,10 @@ export async function POST(request: NextRequest) {
   const allSymbols = list.map((i) => i.symbol);
   const recentHistory = await getSymbolsWithRecentHistory(supabase, allSymbols);
 
-  // Load last prices for simulated
-  const simSymbols = list.filter((i) => isSimulated(i.symbol)).map((i) => i.symbol);
-  const priceMap = new Map<string, number>();
-  if (simSymbols.length > 0) {
-    const { data: cp } = await supabase.from("prices_latest").select("symbol, price").in("symbol", simSymbols);
-    cp?.forEach((p) => priceMap.set(p.symbol, Number(p.price)));
-  }
-
   const now = Date.now();
   const nowISO = new Date(now).toISOString();
   let updatedReal = 0;
-  let updatedSim = 0;
-
-  // 1. Simulate international
-  for (const inst of list) {
-    if (!isSimulated(inst.symbol)) continue;
-    const lastPrice = priceMap.get(inst.symbol);
-    if (lastPrice == null || lastPrice <= 0) continue;
-    const seedPrice = inst.seed_price ? Number(inst.seed_price) : undefined;
-    const newPrice = simulatePrice(lastPrice, inst.symbol, now, seedPrice, inst.exchange_suffix);
-
-    const { error } = await supabase.from("prices_latest").upsert(
-      { symbol: inst.symbol, price: newPrice, as_of: nowISO, source: "sim" },
-      { onConflict: "symbol" }
-    );
-    if (!error) {
-      updatedSim++;
-      if (!recentHistory.has(inst.symbol)) {
-        await supabase.from("price_history").insert({ symbol: inst.symbol, price: newPrice, as_of: nowISO });
-        recentHistory.add(inst.symbol);
-      }
-    }
-  }
-
-  // 2. Fetch US
+  // Fetch US live symbols only
   const usStocks = list.filter((i) => !isSimulated(i.symbol));
   const processUS = async (inst: Inst) => {
     try {
@@ -126,8 +95,8 @@ export async function POST(request: NextRequest) {
   try {
     await matchPendingOrders(supabase);
   } catch (e) {
-    console.warn("[prices/refresh] order matching:", e);
+    console.warn("[prices/refresh] matchPendingOrders:", e);
   }
 
-  return NextResponse.json({ ok: true, updated: updatedReal + updatedSim, real: updatedReal, simulated: updatedSim });
+  return NextResponse.json({ ok: true, updated: updatedReal, real: updatedReal, simulated: 0 });
 }

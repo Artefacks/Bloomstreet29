@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "@/lib/finnhub";
 
 /**
  * POST /api/admin/repair-player
@@ -46,7 +45,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // Ordres limite d'achat exécutés : le cash a été déduit 2x (création + fill).
-    // On rembourse (totalCHF + feeAmount) par ordre.
+    // On rembourse (montant notionnel + feeAmount) par ordre.
     const { data: filledBuyOrders, error: poErr } = await supabase
       .from("pending_orders")
       .select("game_id, symbol, qty, limit_price, fill_price, fee_amount")
@@ -73,9 +72,8 @@ export async function POST(request: NextRequest) {
       const fillPrice = Number(o.fill_price ?? o.limit_price ?? 0);
       const qty = Number(o.qty);
       const feeAmount = Number(o.fee_amount ?? 0);
-      const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-      const totalCHF = qty * fillPrice * fxRate;
-      const toRefund = totalCHF + feeAmount;
+      const totalUsd = qty * fillPrice;
+      const toRefund = totalUsd + feeAmount;
       refundByGame.set(o.game_id, (refundByGame.get(o.game_id) ?? 0) + toRefund);
     }
 

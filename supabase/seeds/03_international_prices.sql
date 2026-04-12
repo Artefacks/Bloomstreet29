@@ -1,8 +1,7 @@
 -- ============================================
--- BLOOMSTREET29 – SEED REALISTIC PRICES FOR INTERNATIONAL STOCKS
--- Run once to initialize. Simulation takes over after this.
--- Prices are approximate Feb 2026 values in local currency.
--- Also sets seed_price on instruments for mean-reversion anchor.
+-- Bloomstreet — seed 03 : prix initiaux titres internationaux + seed_price (ancrage simu)
+-- À lancer une fois après seed 02. La simu reprend ensuite ; le jeu affiche tout en USD sans conversion.
+-- Valeurs indicatives (approx. fév. 2026), unités locales historiques dans les données brutes.
 -- ============================================
 
 -- 1. Seed prices_latest

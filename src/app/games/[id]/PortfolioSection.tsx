@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { PortfolioSummary } from "./PortfolioSummary";
 import { EquityChart } from "./EquityChart";
-import { FX_RATES_TO_CHF } from "@/lib/finnhub";
 
 type Position = { symbol: string; qty: number; avg_cost: number };
 type PendingOrder = { symbol: string; side: string; qty: number; limit_price: number };
@@ -14,10 +13,8 @@ type Props = {
   myCash: number;
   positions: Position[];
   pendingOrders: PendingOrder[];
-  currencyMap: Record<string, string>;
   feeBps: number;
   leverageMultiplier?: number;
-  isBlitz?: boolean;
 };
 
 export function PortfolioSection(props: Props) {
@@ -33,7 +30,7 @@ export function PortfolioSection(props: Props) {
         {...props}
         leverageMultiplier={props.leverageMultiplier ?? 1}
         onRefreshComplete={handleRefreshComplete}
-        refreshIntervalMs={props.isBlitz ? 5000 : 20000}
+        refreshIntervalMs={20000}
       />
       <div className="border-t border-slate-100 pt-2">
         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-1">
@@ -45,8 +42,6 @@ export function PortfolioSection(props: Props) {
             myCash={props.myCash}
             positions={props.positions}
             pendingOrders={props.pendingOrders}
-            currencyMap={props.currencyMap}
-            fxRates={FX_RATES_TO_CHF}
             feeBps={props.feeBps}
             leverageMultiplier={props.leverageMultiplier ?? 1}
             refreshTrigger={chartRefreshKey}

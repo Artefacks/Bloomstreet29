@@ -16,27 +16,15 @@ const GAME_MODES = [
     description: "Mode calme pour apprendre et tester des stratégies sur plusieurs jours.",
     highlights: ["Rythme tranquille", "Ordres limite", "Classement final"],
   },
-  {
-    id: "blitz",
-    name: "Blitz",
-    emoji: "⚡",
-    durationLabel: "1 heure",
-    durationMinutes: 60,
-    initialCash: 50_000,
-    feeBps: 0,
-    leverage: 2,
-    description: "Mode rapide en rounds: plus fun, plus nerveux, mais avec une vraie logique de jeu.",
-    highlights: ["Tech / Energy / Bonds", "Rounds de 6 min", "Signal de marché", "Levier 2×", "0 % frais"],
-  },
 ] as const;
 
 export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
-  const [mode, setMode] = useState<"classic" | "blitz">("classic");
+  const [mode, setMode] = useState<"classic">("classic");
   const [customDays, setCustomDays] = useState(7);
   const [customCash, setCustomCash] = useState(100_000);
 
   const config = GAME_MODES.find((m) => m.id === mode)!;
-  const durationDays = mode === "blitz" ? 0 : customDays;
+  const durationDays = customDays;
   const initialCash = mode === "classic" ? customCash : config.initialCash;
 
   return (
@@ -44,12 +32,9 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
       <div className="max-w-2xl w-full">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">
+          <h1 className="text-3xl font-bold text-slate-800">
             Créer une partie
           </h1>
-          <p className="text-slate-600">
-            1) Choisis un mode. 2) Crée la partie. 3) Partage le code.
-          </p>
         </div>
 
         {/* Error */}
@@ -60,7 +45,7 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
         )}
 
         {/* Mode selector */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 gap-4 mb-8">
           {GAME_MODES.map((m) => (
             <button
               key={m.id}
@@ -95,7 +80,7 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
         {/* Config card */}
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 mb-6">
           <h2 className="font-semibold text-slate-800 mb-4">
-            {mode === "blitz" ? "Résumé du mode Blitz" : "Paramètres du mode Classique"}
+            Paramètres du mode Classique
           </h2>
 
           {mode === "classic" && (
@@ -117,7 +102,7 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
               </div>
               <div>
                 <label htmlFor="initialCash" className="block text-sm font-medium text-slate-700 mb-1">
-                  Cash initial (CHF)
+                  Cash initial (USD)
                 </label>
                 <input
                   type="number"
@@ -133,19 +118,10 @@ export function NewGameForm({ errorMessage }: { errorMessage: string | null }) {
             </div>
           )}
 
-          {mode === "blitz" && (
-            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 mb-4">
-              <p className="text-sm text-amber-800">
-                <strong>⚡ Blitz</strong> : 1h, 50 000 CHF, 3 classes d&apos;actifs.
-                Chaque round dure 6 min avec un signal de marché. Objectif: réagir vite et garder une stratégie claire.
-              </p>
-            </div>
-          )}
-
           <form method="POST" action="/api/games/create" className="space-y-4">
             <input type="hidden" name="gameMode" value={mode} />
             <input type="hidden" name="durationDays" value={durationDays} />
-            <input type="hidden" name="durationMinutes" value={mode === "blitz" ? 60 : 0} />
+            <input type="hidden" name="durationMinutes" value={0} />
             <input type="hidden" name="initialCash" value={initialCash} />
             <input type="hidden" name="leverageMultiplier" value={config.leverage} />
             <input type="hidden" name="feeBps" value={config.feeBps} />

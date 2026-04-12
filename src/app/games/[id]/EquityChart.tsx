@@ -21,8 +21,6 @@ type Props = {
   myCash: number;
   positions: Position[];
   pendingOrders?: PendingOrder[];
-  currencyMap: Record<string, string>;
-  fxRates: Record<string, number>;
   feeBps?: number;
   leverageMultiplier?: number;
   refreshTrigger?: number;
@@ -37,7 +35,7 @@ function toPoint(at: string, value: number): Point {
   };
 }
 
-export function EquityChart({ gameId, myCash, positions, pendingOrders = [], currencyMap, fxRates, feeBps = 10, leverageMultiplier = 1, refreshTrigger }: Props) {
+export function EquityChart({ gameId, myCash, positions, pendingOrders = [], feeBps = 10, leverageMultiplier = 1, refreshTrigger }: Props) {
   const [history, setHistory] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveValue, setLiveValue] = useState<number | null>(null);
@@ -71,11 +69,7 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], cur
       // Réintégrer le cash réservé des ordres limite d'achat (comme PortfolioSummary / game-state)
       const reserved = pendingOrders
         .filter((o) => o.side === "buy")
-        .reduce((sum, o) => {
-          const ccy = currencyMap[o.symbol] ?? "USD";
-          const rate = fxRates[ccy] ?? 1;
-          return sum + o.limit_price * o.qty * rate;
-        }, 0);
+        .reduce((sum, o) => sum + o.limit_price * o.qty, 0);
       const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
       let equity = myCash + reserved + reserveFee;
       if (symbols.length > 0) {
@@ -86,10 +80,8 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], cur
         for (const pos of positions) {
           const p = pricesMap[pos.symbol]?.price;
           if (p != null) {
-            const ccy = currencyMap[pos.symbol] ?? "USD";
-            const rate = fxRates[ccy] ?? 1;
-            const costBasis = pos.qty * pos.avg_cost * rate;
-            const marketValue = pos.qty * Number(p) * rate;
+            const costBasis = pos.qty * pos.avg_cost;
+            const marketValue = pos.qty * Number(p);
             equity += costBasis + (marketValue - costBasis) * leverageMultiplier;
           }
         }
@@ -98,9 +90,7 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], cur
           if (o.side !== "sell") continue;
           const p = pricesMap[o.symbol]?.price;
           if (p != null) {
-            const ccy = currencyMap[o.symbol] ?? "USD";
-            const rate = fxRates[ccy] ?? 1;
-            equity += o.qty * Number(p) * rate;
+            equity += o.qty * Number(p);
           }
         }
       }
@@ -110,7 +100,7 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], cur
     } finally {
       fetchingRef.current = false;
     }
-  }, [symbols, positions, pendingOrders, myCash, currencyMap, fxRates, feeBps, leverageMultiplier]);
+  }, [symbols, positions, pendingOrders, myCash, feeBps, leverageMultiplier]);
 
   useEffect(() => {
     setLoading(true);
@@ -239,7 +229,7 @@ function EquityTooltip({ active, payload, label }: { active?: boolean; payload?:
   return (
     <div className="bg-slate-800 text-white px-3 py-1.5 rounded-lg shadow-lg text-xs">
       <p className="font-mono font-medium">
-        {payload[0].value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} CHF
+        {payload[0].value.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} USD
       </p>
       <p className="text-slate-400 text-[10px]">{label}</p>
     </div>

@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getGameState } from "@/lib/game-state";
-import { getCurrencyForSymbol, formatCurrency, FX_RATES_TO_CHF } from "@/lib/finnhub";
+import { formatCurrency, getCurrencyForSymbol } from "@/lib/finnhub";
 import { getAvatarEmoji } from "@/lib/avatars";
 import { redirect } from "next/navigation";
 import { MarketSection } from "./MarketSection";
 import { EquityChart } from "./EquityChart";
 import { PositionsCard } from "./PositionsCard";
 import { PortfolioSection } from "./PortfolioSection";
-import { GameCountdown } from "./GameCountdown";
 
 export default async function GamePage({
   params,
@@ -53,14 +52,9 @@ export default async function GamePage({
   const urlParams = await searchParams as { success?: string; error?: string; symbol?: string };
   const success = urlParams.success;
   const error = urlParams.error;
-  const isBlitz = state.game.game_mode === "blitz";
   const endDate = state.game.ends_at
-    ? isBlitz
-      ? null
-      : new Date(state.game.ends_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+    ? new Date(state.game.ends_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
     : null;
-
-  const openPendingOrders = state.pendingOrders.filter((o) => o.status === "open");
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -72,20 +66,11 @@ export default async function GamePage({
               Bloomstreet29
             </Link>
             <div className="flex items-center gap-3 text-xs text-slate-300">
-              {isBlitz && (
-                <span className="px-2 py-0.5 rounded bg-amber-500/90 text-amber-950 font-bold text-[10px] animate-pulse">
-                  ⚡ BLITZ ARENA
-                </span>
-              )}
               <span>
                 Code : <strong className="font-mono text-white">{state.game.join_code}</strong>
               </span>
               {state.game.status === "finished" ? (
                 <span className="px-2 py-0.5 rounded bg-slate-600 text-[10px]">Terminee</span>
-              ) : isBlitz ? (
-                <span>
-                  Fin : <GameCountdown endsAt={state.game.ends_at} gameMode="blitz" />
-                </span>
               ) : endDate ? (
                 <span>Fin : {endDate}</span>
               ) : null}
@@ -137,11 +122,6 @@ export default async function GamePage({
             gameEnded={state.game.status === "finished"}
             allowFractional={state.game.allow_fractional}
             symbolFromUrl={urlParams.symbol}
-            pendingOrders={state.pendingOrders}
-            isBlitz={isBlitz}
-            userId={user.id}
-            playerIds={state.players.map((p) => p.user_id)}
-            gameStartedAt={state.game.started_at}
           />
         </section>
 
@@ -156,13 +136,9 @@ export default async function GamePage({
               initialCash={state.game.initial_cash}
               myCash={state.myCash ?? 0}
               positions={state.myPositions}
-              pendingOrders={state.pendingOrders.filter((o) => o.status === "open")}
-              currencyMap={Object.fromEntries(
-                state.instruments.map((i) => [i.symbol, i.currency])
-              )}
+              pendingOrders={[]}
               feeBps={state.game.fee_bps}
               leverageMultiplier={state.game.leverage_multiplier}
-              isBlitz={isBlitz}
             />
           </div>
 
@@ -195,7 +171,7 @@ export default async function GamePage({
                     </span>
                     <span className="text-right">
                       <span className="font-mono font-semibold text-slate-900 text-sm">
-                        {entry.totalValue.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} CHF
+                        {entry.totalValue.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} USD
                       </span>
                       <span className={`block text-[10px] font-mono ${entry.pnlPct >= 0 ? "text-green-600" : "text-red-600"}`}>
                         {(entry.pnlPct >= 0 ? "+" : "") + entry.pnlPct.toFixed(1)}%
@@ -207,7 +183,7 @@ export default async function GamePage({
             </section>
           </div>
 
-          {/* Col 3: Positions + Pending orders */}
+          {/* Col 3: Positions */}
           <div className="space-y-4">
             {/* Positions with live P&L */}
             <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
@@ -221,57 +197,11 @@ export default async function GamePage({
                 initialPrices={Object.fromEntries(
                   state.instruments.map((i) => [i.symbol, i.price])
                 )}
-                currencyMap={Object.fromEntries(
-                  state.instruments.map((i) => [i.symbol, i.currency])
-                )}
-                fxRates={FX_RATES_TO_CHF}
                 leverageMultiplier={state.game.leverage_multiplier}
-                refreshIntervalMs={isBlitz ? 5000 : 15000}
+                refreshIntervalMs={15000}
               />
             </section>
 
-            {/* Pending orders */}
-            {openPendingOrders.length > 0 && (
-              <section className="bg-white rounded-xl shadow-sm border border-amber-200 p-4">
-                <h2 className="text-[10px] font-medium text-amber-600 uppercase tracking-wide mb-2">
-                  Ordres en attente ({openPendingOrders.length})
-                </h2>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                  {openPendingOrders.map((o) => (
-                    <div key={o.id} className="flex items-center justify-between py-1 text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[10px] font-bold ${o.side === "buy" ? "text-green-600" : "text-red-600"}`}>
-                          {o.side === "buy" ? "ACH" : "VEN"}
-                        </span>
-                        <Link
-                          href={`/games/${gameId}?symbol=${encodeURIComponent(o.symbol)}`}
-                          className="font-mono font-medium text-slate-800 hover:text-teal-600 hover:underline"
-                        >
-                          {o.symbol}
-                        </Link>
-                        <span className="text-slate-400 text-xs">x{o.qty}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-slate-500">
-                          @ {o.limit_price.toFixed(2)} {formatCurrency(getCurrencyForSymbol(o.symbol))}
-                        </span>
-                        <form method="POST" action="/api/trade/cancel" className="inline">
-                          <input type="hidden" name="orderId" value={o.id} />
-                          <input type="hidden" name="gameId" value={gameId} />
-                          <button
-                            type="submit"
-                            className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 font-medium"
-                            title="Annuler cet ordre"
-                          >
-                            Annuler
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
         </div>
 

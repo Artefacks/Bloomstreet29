@@ -62,13 +62,7 @@ function fmt(n: number, d = 2) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-function ccy(c: string) {
-  return c === "CHF" ? "CHF" : c === "EUR" ? "€" : c === "USD" ? "$" : c === "SEK" ? "kr" : c;
-}
-
 /* ──── Component ──── */
-
-type OrderType = "market" | "limit";
 
 type Props = {
   gameId: string;
@@ -83,18 +77,15 @@ type Props = {
   gameEnded?: boolean;
   tradingLockedReason?: string;
   allowFractional?: boolean;
-  fxRate?: number; // currency → CHF rate
   tick?: number; // optionnel : tick partagé avec le graphique (toutes les 5s)
 };
 
 const CONFIRM_THRESHOLD_PCT = 0.2; // Demander confirmation si > 20% du cash/position
 
 export function GameTradeForm({
-  gameId, symbol, price, currency, hasPosition, positionQty, avgCost,
-  myCash, feeBps, gameEnded = false, tradingLockedReason, allowFractional = true, fxRate = 1, tick: tickProp,
+  gameId, symbol, price, currency: _currency, hasPosition, positionQty, avgCost,
+  myCash, feeBps, gameEnded = false, tradingLockedReason, allowFractional = true, tick: tickProp,
 }: Props) {
-  const [orderType, setOrderType] = useState<OrderType>("market");
-  const [limitPrice, setLimitPrice] = useState("");
   const [qty, setQty] = useState("");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [internalTick, setInternalTick] = useState(0);
@@ -103,7 +94,7 @@ export function GameTradeForm({
 
   const tick = tickProp ?? internalTick;
 
-  const c = ccy(currency);
+  const c = "$";
 
   // Tick every 5s for dynamic order book (si pas fourni par le parent)
   useEffect(() => {
@@ -123,26 +114,20 @@ export function GameTradeForm({
 
   // Execution price
   const execPrice = useMemo(() => {
-    if (orderType === "limit") {
-      const lp = parseFloat(limitPrice);
-      return isFinite(lp) && lp > 0 ? lp : null;
-    }
     return side === "buy" ? bestAsk : bestBid;
-  }, [orderType, limitPrice, side, bestAsk, bestBid]);
+  }, [side, bestAsk, bestBid]);
 
   const qtyNum = parseFloat(qty) || 0;
   const qtyFinal = allowFractional ? qtyNum : Math.floor(qtyNum);
 
-  // Preview (costs converted to CHF for cash impact)
   const preview = useMemo(() => {
     if (!execPrice || qtyFinal <= 0) return null;
-    const sub = qtyFinal * execPrice; // in instrument currency
-    const subCHF = r2(sub * fxRate);
-    const fee = Math.min(15, r2((subCHF * feeBps) / 10000));
-    const totalCHF = side === "buy" ? r2(subCHF + fee) : r2(subCHF - fee);
-    const newCash = side === "buy" ? r2(myCash - subCHF - fee) : r2(myCash + subCHF - fee);
-    return { sub: r2(sub), subCHF, fee, totalCHF, newCash };
-  }, [execPrice, qtyFinal, feeBps, side, myCash, fxRate]);
+    const sub = r2(qtyFinal * execPrice);
+    const fee = Math.min(15, r2((sub * feeBps) / 10000));
+    const totalUsd = side === "buy" ? r2(sub + fee) : r2(sub - fee);
+    const newCash = side === "buy" ? r2(myCash - sub - fee) : r2(myCash + sub - fee);
+    return { sub, fee, totalUsd, newCash };
+  }, [execPrice, qtyFinal, feeBps, side, myCash]);
 
   const canBuy = preview != null && preview.newCash >= 0 && qtyFinal > 0;
   const canSell = preview != null && qtyFinal > 0 && qtyFinal <= positionQty;
@@ -150,15 +135,14 @@ export function GameTradeForm({
 
   // Faut-il demander confirmation ? (gros ordres)
   const needsConfirmation = preview != null && qtyFinal > 0 && (
-    (side === "buy" && preview.totalCHF > myCash * CONFIRM_THRESHOLD_PCT) ||
+    (side === "buy" && preview.totalUsd > myCash * CONFIRM_THRESHOLD_PCT) ||
     (side === "sell" && qtyFinal > positionQty * CONFIRM_THRESHOLD_PCT)
   );
 
   const setMaxBuy = () => {
     if (!execPrice || execPrice <= 0) return;
-    const costPerUnitCHF = execPrice * fxRate;
     const feeM = 1 + feeBps / 10000;
-    const max = Math.floor((myCash / (costPerUnitCHF * feeM)) * 100) / 100;
+    const max = Math.floor((myCash / (execPrice * feeM)) * 100) / 100;
     setQty(allowFractional ? max.toFixed(2) : Math.floor(max).toString());
   };
 
@@ -215,43 +199,6 @@ export function GameTradeForm({
         </button>
       </div>
 
-      {/* ──── Order type ──── */}
-      <div className="flex gap-3">
-        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-          <input type="radio" checked={orderType === "market"} onChange={() => setOrderType("market")} className="accent-teal-600" />
-          Ordre au marché
-        </label>
-        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-          <input type="radio" checked={orderType === "limit"} onChange={() => {
-            setOrderType("limit");
-            setLimitPrice(r4((bestBid + bestAsk) / 2).toFixed(4));
-          }} className="accent-teal-600" />
-          Ordre limite
-        </label>
-      </div>
-
-      {/* ──── Limit price ──── */}
-      {orderType === "limit" && (
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Prix limite ({c})</label>
-          <input type="number" step="0.0001" min="0.01" value={limitPrice}
-            onChange={(e) => setLimitPrice(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-            placeholder={r4((bestBid + bestAsk) / 2).toFixed(4)} />
-          {execPrice != null && (
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {side === "buy"
-                ? execPrice >= bestAsk
-                  ? "Exécution immédiate (limite ≥ ask)"
-                  : `En attente — exécuté quand le ask descend à ${fmt(execPrice, 4)}`
-                : execPrice <= bestBid
-                  ? "Exécution immédiate (limite ≤ bid)"
-                  : `En attente — exécuté quand le bid monte à ${fmt(execPrice, 4)}`}
-            </p>
-          )}
-        </div>
-      )}
-
       {/* ──── Quantity ──── */}
       <div>
         <div className="flex items-center justify-between mb-1">
@@ -281,42 +228,31 @@ export function GameTradeForm({
       {/* ──── Preview ──── */}
       {preview && qtyFinal > 0 && (
         <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1 border border-slate-200">
-          {orderType === "limit" && (
-            <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 mb-1 font-medium">
-              Ordre limite — exécuté quand le cours atteint ton prix
-            </div>
-          )}
           <div className="flex justify-between">
-            <span className="text-slate-600">{orderType === "market" ? "Prix" : "Prix limite"}</span>
+            <span className="text-slate-600">Prix</span>
             <span className="font-mono">{fmt(execPrice!, 4)} {c}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-600">{qtyFinal} x {fmt(execPrice!, 4)}</span>
             <span className="font-mono">{fmt(preview.sub)} {c}</span>
           </div>
-          {currency !== "CHF" && (
-            <div className="flex justify-between text-slate-400 text-xs">
-              <span>Taux de change</span>
-              <span className="font-mono">1 {c} = {fxRate.toFixed(4)} CHF → {fmt(preview.subCHF)} CHF</span>
-            </div>
-          )}
           <div className="flex justify-between text-slate-500">
-            <span>Frais ({(feeBps / 100).toFixed(2)}%, max 15 CHF)</span>
-            <span className="font-mono">{side === "buy" ? "+" : "−"}{fmt(preview.fee)} CHF</span>
+            <span>Frais ({(feeBps / 100).toFixed(2)}%, max 15 USD)</span>
+            <span className="font-mono">{side === "buy" ? "+" : "−"}{fmt(preview.fee)} USD</span>
           </div>
           <div className="flex justify-between font-semibold border-t border-slate-200 pt-1">
             <span>{side === "buy" ? "Coût total" : "Crédit net"}</span>
             <span className={`font-mono ${side === "buy" ? "text-red-700" : "text-green-700"}`}>
-              {side === "buy" ? "−" : "+"}{fmt(preview.totalCHF)} CHF
+              {side === "buy" ? "−" : "+"}{fmt(preview.totalUsd)} USD
             </span>
           </div>
           <div className="flex justify-between text-xs text-slate-500 pt-1">
             <span>Cash actuel</span>
-            <span className="font-mono">{fmt(myCash)} CHF</span>
+            <span className="font-mono">{fmt(myCash)} USD</span>
           </div>
           <div className="flex justify-between text-xs font-medium">
             <span>Nouveau solde</span>
-            <span className={`font-mono ${preview.newCash < 0 ? "text-red-600" : "text-slate-800"}`}>{fmt(preview.newCash)} CHF</span>
+            <span className={`font-mono ${preview.newCash < 0 ? "text-red-600" : "text-slate-800"}`}>{fmt(preview.newCash)} USD</span>
           </div>
           {side === "buy" && preview.newCash < 0 && <p className="text-xs text-red-600">Cash insuffisant.</p>}
           {side === "sell" && qtyFinal > positionQty && <p className="text-xs text-red-600">Position insuffisante.</p>}
@@ -331,7 +267,7 @@ export function GameTradeForm({
         onSubmit={(e) => {
           e.preventDefault();
           if (submittingRef.current) return;
-          if (needsConfirmation && !confirm(`${side === "buy" ? "Achat" : "Vente"} de ${qtyFinal} ${symbol} pour ${preview?.totalCHF.toFixed(0)} CHF. Confirmer ?`)) {
+          if (needsConfirmation && !confirm(`${side === "buy" ? "Achat" : "Vente"} de ${qtyFinal} ${symbol} pour ${preview?.totalUsd.toFixed(0)} USD. Confirmer ?`)) {
             return;
           }
           submittingRef.current = true;
@@ -343,16 +279,10 @@ export function GameTradeForm({
         <input type="hidden" name="symbol" value={symbol} />
         <input type="hidden" name="qty" value={qtyFinal > 0 ? qtyFinal : ""} />
         <input type="hidden" name="side" value={side} />
-        <input type="hidden" name="orderType" value={orderType} />
-        {orderType === "limit" && execPrice != null && (
-          <input type="hidden" name="limitPrice" value={execPrice} />
-        )}
         <button type="submit"
           disabled={gameEnded || tradingLocked || qtyFinal <= 0 || execPrice == null || (side === "buy" && !canBuy) || (side === "sell" && !canSell) || pendingSubmit}
           className={`w-full py-2.5 rounded-lg font-medium text-sm text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${side === "buy" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}`}>
-          {pendingSubmit ? "Envoi…" : orderType === "limit"
-            ? `Placer ordre limite ${side === "buy" ? "d'achat" : "de vente"} ${qtyFinal > 0 ? qtyFinal + " " + symbol : ""}`
-            : side === "buy"
+          {pendingSubmit ? "Envoi…" : side === "buy"
               ? `Acheter au marché ${qtyFinal > 0 ? qtyFinal + " " + symbol : ""}`
               : `Vendre au marché ${qtyFinal > 0 ? qtyFinal + " " + symbol : ""}`}
         </button>

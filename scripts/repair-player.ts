@@ -7,7 +7,6 @@
  * Nécessite .env.local avec SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL
  */
 import { createClient } from "@supabase/supabase-js";
-import { getCurrencyForSymbol, getExchangeRateToCHF } from "../src/lib/finnhub";
 
 const userId = process.argv[2] || "d2083f07-e290-4e2c-91fe-46a835144432";
 
@@ -48,9 +47,8 @@ async function main() {
     const fillPrice = Number(o.fill_price ?? o.limit_price ?? 0);
     const qty = Number(o.qty);
     const feeAmount = Number(o.fee_amount ?? 0);
-    const fxRate = getExchangeRateToCHF(getCurrencyForSymbol(o.symbol));
-    const totalCHF = qty * fillPrice * fxRate;
-    const toRefund = totalCHF + feeAmount;
+    const totalUsd = qty * fillPrice;
+    const toRefund = totalUsd + feeAmount;
     refundByGame.set(o.game_id, (refundByGame.get(o.game_id) ?? 0) + toRefund);
   }
 
@@ -82,7 +80,7 @@ async function main() {
     }
 
     console.log(
-      `Game ${gameId}: cash ${currentCash.toFixed(2)} -> ${newCash.toFixed(2)} (+${refund.toFixed(2)} CHF)`
+      `Game ${gameId}: cash ${currentCash.toFixed(2)} -> ${newCash.toFixed(2)} (+${refund.toFixed(2)} USD)`
     );
     repaired++;
   }

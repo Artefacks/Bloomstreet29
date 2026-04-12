@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   }
 
   const form = await request.formData();
-  const gameMode = (form.get("gameMode") as string) === "blitz" ? "blitz" : "classic";
+  const gameMode = "classic";
   const durationMinutesRaw = form.get("durationMinutes");
   const durationMinutes = durationMinutesRaw && typeof durationMinutesRaw === "string"
     ? Math.max(1, parseInt(durationMinutesRaw, 10) || 0)
@@ -70,14 +70,12 @@ export async function POST(request: NextRequest) {
 
   const startedAt = new Date().toISOString();
   const endsAt = new Date(
-    gameMode === "blitz" && durationMinutes > 0
-      ? Date.now() + durationMinutes * 60 * 1000
-      : Date.now() + Math.max(1, durationDays) * 24 * 60 * 60 * 1000
+    Date.now() + Math.max(1, durationDays) * 24 * 60 * 60 * 1000
   ).toISOString();
 
   const insertPayload: Record<string, unknown> = {
     join_code: joinCode,
-    duration_days: gameMode === "blitz" ? 0 : Math.max(1, durationDays),
+    duration_days: Math.max(1, durationDays),
     initial_cash: initialCash,
     created_by: user.id,
     started_at: startedAt,
