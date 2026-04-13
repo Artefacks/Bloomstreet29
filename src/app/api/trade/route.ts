@@ -100,9 +100,9 @@ export async function POST(request: NextRequest) {
   // ═══════════════════════════════════════════════
   if (!sessionOpen) {
     if (side === "buy") {
-      const totalWithFee = totalUsd + feeAmount;
-      if (cash < totalWithFee) {
-        return redirectToGame(request, gameId, undefined, "Cash insuffisant (montant + frais).", symbol);
+      // Réserve = notionnel seul ; frais prélevés à l'exécution
+      if (cash < totalUsd) {
+        return redirectToGame(request, gameId, undefined, "Cash insuffisant pour cet ordre.", symbol);
       }
       const { error: poErr } = await supabase.from("pending_orders").insert({
         game_id: gameId,
@@ -118,13 +118,13 @@ export async function POST(request: NextRequest) {
         console.error("[trade] pending buy:", poErr);
         return redirectToGame(request, gameId, undefined, "Impossible d'enregistrer l'ordre.", symbol);
       }
-      const newCash = cash - totalWithFee;
+      const newCash = cash - totalUsd;
       await supabase.from("game_players").update({ cash: newCash }).eq("id", player.id);
       await recordEquitySnapshot(supabase, gameId, user.id, newCash);
       return redirectToGame(
         request,
         gameId,
-        `Ordre en attente : achat ${qtyFinal} ${symbol} (marché fermé — exécution à l'ouverture de ${exchange.name}).`,
+        `Ordre en attente : achat ${qtyFinal} ${symbol} (${totalUsd.toFixed(2)} $ réservés, frais à l'exécution — ouverture ${exchange.name}).`,
         undefined,
         symbol
       );

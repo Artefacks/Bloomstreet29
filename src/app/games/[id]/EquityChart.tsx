@@ -21,7 +21,6 @@ type Props = {
   myCash: number;
   positions: Position[];
   pendingOrders?: PendingOrder[];
-  feeBps?: number;
   leverageMultiplier?: number;
   refreshTrigger?: number;
 };
@@ -35,7 +34,7 @@ function toPoint(at: string, value: number): Point {
   };
 }
 
-export function EquityChart({ gameId, myCash, positions, pendingOrders = [], feeBps = 10, leverageMultiplier = 1, refreshTrigger }: Props) {
+export function EquityChart({ gameId, myCash, positions, pendingOrders = [], leverageMultiplier = 1, refreshTrigger }: Props) {
   const [history, setHistory] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
   const [liveValue, setLiveValue] = useState<number | null>(null);
@@ -66,12 +65,10 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], fee
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     try {
-      // Réintégrer le cash réservé des ordres limite d'achat (comme PortfolioSummary / game-state)
-      const reserved = pendingOrders
+      const reservedBuy = pendingOrders
         .filter((o) => o.side === "buy")
         .reduce((sum, o) => sum + o.limit_price * o.qty, 0);
-      const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
-      let equity = myCash + reserved + reserveFee;
+      let equity = myCash + reservedBuy;
       if (symbols.length > 0) {
         const res = await fetch(`/api/prices?symbols=${encodeURIComponent(symbols.join(","))}`);
         if (!res.ok) return;
@@ -100,7 +97,7 @@ export function EquityChart({ gameId, myCash, positions, pendingOrders = [], fee
     } finally {
       fetchingRef.current = false;
     }
-  }, [symbols, positions, pendingOrders, myCash, feeBps, leverageMultiplier]);
+  }, [symbols, positions, pendingOrders, myCash, leverageMultiplier]);
 
   useEffect(() => {
     setLoading(true);

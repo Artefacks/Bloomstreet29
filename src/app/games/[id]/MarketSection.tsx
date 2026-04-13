@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { GameTradeForm } from "./GameTradeForm";
 import { LivePrices } from "./LivePrices";
 import { PriceChartSingle } from "./PriceChartSingle";
-import { NewsFeed } from "./NewsFeed";
 import { SectorOverview } from "./SectorOverview";
 import { SECTORS, getSectorForSymbol, getSectorId, getExchangeForSymbol, isMarketOpen } from "@/lib/sectors";
 import { tickOscillation } from "@/lib/price-oscillation";
@@ -34,7 +33,7 @@ type Position = {
   avg_cost: number;
 };
 
-type SortKey = "symbol" | "name" | "price" | "sector" | "change";
+type SortKey = "symbol" | "name" | "price" | "sector";
 type PriceDirection = "up" | "down" | "none";
 
 export function MarketSection({
@@ -85,8 +84,8 @@ export function MarketSection({
   const [chartRefreshKey, setChartRefreshKey] = useState(0);
 
   // Price tracking: two refs
-  // basePricesRef = prices at page load, never updated → used for % change
-  // prevPricesRef = previous tick prices → used for flash direction only
+  // basePricesRef = prices at page load, never updated → secteurs (vs début de session)
+  // prevPricesRef = previous tick prices → flash direction
   const [directions, setDirections] = useState<Record<string, PriceDirection>>({});
   const basePricesRef = useRef<Record<string, number>>({});
   const prevPricesRef = useRef<Record<string, number>>({});
@@ -177,10 +176,6 @@ export function MarketSection({
         cmp = (a.name ?? "").localeCompare(b.name ?? "");
       } else if (sortBy === "sector") {
         cmp = (getSectorForSymbol(a.symbol)?.name ?? "").localeCompare(getSectorForSymbol(b.symbol)?.name ?? "");
-      } else if (sortBy === "change") {
-        const chgA = a.price && basePricesRef.current[a.symbol] ? (a.price - basePricesRef.current[a.symbol]) / basePricesRef.current[a.symbol] : 0;
-        const chgB = b.price && basePricesRef.current[b.symbol] ? (b.price - basePricesRef.current[b.symbol]) / basePricesRef.current[b.symbol] : 0;
-        cmp = chgA - chgB;
       } else {
         cmp = (a.price ?? 0) - (b.price ?? 0);
       }
@@ -220,13 +215,6 @@ export function MarketSection({
         activeSector={activeSector}
       />
 
-      {/* News feed */}
-      <NewsFeed
-        instruments={instruments}
-        prevPrices={basePricesRef.current}
-        onSymbolClick={setSelectedSymbol}
-      />
-
       {/* Search + sort */}
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -246,7 +234,6 @@ export function MarketSection({
             <option value="name">Nom</option>
             <option value="price">Prix</option>
             <option value="sector">Secteur</option>
-            <option value="change">Variation</option>
           </select>
           <button
             type="button"
@@ -266,7 +253,6 @@ export function MarketSection({
               <th className="px-3 py-2 text-left font-medium text-slate-600 text-xs">Symbole</th>
               <th className="px-3 py-2 text-left font-medium text-slate-600 text-xs hidden sm:table-cell">Secteur</th>
               <th className="px-3 py-2 text-right font-medium text-slate-600 text-xs">Prix</th>
-              <th className="px-3 py-2 text-right font-medium text-slate-600 text-xs w-16">Var.</th>
               <th className="px-3 py-2 text-center font-medium text-slate-600 text-xs w-12 hidden md:table-cell">Bourse</th>
             </tr>
           </thead>
@@ -276,11 +262,6 @@ export function MarketSection({
               const sector = getSectorForSymbol(inst.symbol);
               const exchange = getExchangeForSymbol(inst.symbol);
               const marketStatus = isMarketOpen(exchange);
-
-              const base = basePricesRef.current[inst.symbol];
-              const changePct = inst.price && base && base > 0
-                ? ((inst.price - base) / base) * 100
-                : null;
 
               const flashBg = dir === "up" ? "bg-green-50" : dir === "down" ? "bg-red-50" : "";
 
@@ -318,15 +299,6 @@ export function MarketSection({
                         {fmtPrice(inst.price)} {fmtCcy(inst.currency)}
                       </>
                     ) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right text-[11px] font-mono">
-                    {changePct != null ? (
-                      <span className={changePct >= 0 ? "text-green-600" : "text-red-600"}>
-                        {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
-                      </span>
-                    ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
                   </td>
                   <td className="px-3 py-2 text-center hidden md:table-cell">
                     <span

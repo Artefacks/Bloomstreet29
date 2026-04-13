@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Enregistre un snapshot de la valorisation totale du joueur (pour le graphique d'évolution).
  * Appelé après chaque trade (marché ou limite).
  * Prend en compte l'effet de levier si game.leverage_multiplier > 1.
- * Inclut le cash réservé (ordres limite d'achat) et les actions réservées (ordres limite vente).
+ * Cash DB = disponible ; réserve achats = somme (qty × limite) ; pas de double comptage ni « frais réservés ».
  */
 export async function recordEquitySnapshot(
   supabase: SupabaseClient,
@@ -14,11 +14,10 @@ export async function recordEquitySnapshot(
 ) {
   const { data: game } = await supabase
     .from("games")
-    .select("leverage_multiplier, fee_bps")
+    .select("leverage_multiplier")
     .eq("id", gameId)
     .single();
   const leverage = Number(game?.leverage_multiplier ?? 1);
-  const feeBps = Number((game as { fee_bps?: number } | null)?.fee_bps ?? 10);
 
   const { data: positions } = await supabase
     .from("positions")
@@ -51,15 +50,13 @@ export async function recordEquitySnapshot(
 
   let totalValue = cash;
 
-  // Réintégrer le cash réservé des ordres limite d'achat (comme game-state / PortfolioSummary)
-  let reserved = 0;
+  let reservedBuy = 0;
   (pendingOrders ?? [])
     .filter((o) => o.side === "buy")
     .forEach((o) => {
-      reserved += Number(o.limit_price) * Number(o.qty);
+      reservedBuy += Number(o.limit_price) * Number(o.qty);
     });
-  const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
-  totalValue += reserved + reserveFee;
+  totalValue += reservedBuy;
 
   // Positions
   positions?.forEach((p) => {

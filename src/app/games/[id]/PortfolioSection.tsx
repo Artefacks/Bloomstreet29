@@ -13,7 +13,6 @@ type Props = {
   myCash: number;
   positions: Position[];
   pendingOrders: PendingOrder[];
-  feeBps: number;
   leverageMultiplier?: number;
 };
 
@@ -27,7 +26,10 @@ export function PortfolioSection(props: Props) {
   return (
     <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
       <PortfolioSummary
-        {...props}
+        initialCash={props.initialCash}
+        myCash={props.myCash}
+        positions={props.positions}
+        pendingOrders={props.pendingOrders}
         leverageMultiplier={props.leverageMultiplier ?? 1}
         onRefreshComplete={handleRefreshComplete}
         refreshIntervalMs={20000}
@@ -42,7 +44,6 @@ export function PortfolioSection(props: Props) {
             myCash={props.myCash}
             positions={props.positions}
             pendingOrders={props.pendingOrders}
-            feeBps={props.feeBps}
             leverageMultiplier={props.leverageMultiplier ?? 1}
             refreshTrigger={chartRefreshKey}
           />

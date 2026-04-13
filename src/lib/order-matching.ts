@@ -76,9 +76,7 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
         .maybeSingle();
 
       if (order.side === "buy" && player) {
-        const reserveTotal = qty * limitPrice;
-        const reserveFee = Math.min(15, Math.round((reserveTotal * feeBps) / 10000 * 100) / 100);
-        const refund = reserveTotal + reserveFee;
+        const refund = qty * limitPrice;
         await supabase
           .from("game_players")
           .update({ cash: Number(player.cash) + refund })
@@ -149,13 +147,11 @@ export async function matchPendingOrders(supabase: SupabaseClient) {
 
     if (order.side === "buy") {
       let cashAfterBuy = cash;
-      // Cash déjà déduit à la création (limit_price = ask de référence si market_deferred).
+      // Réserve = notionnel seul à la création ; à l'exécution on paie notionnel + frais.
       if (marketDeferred) {
-        const ask0 = limitPrice;
-        const feeReserved = Math.min(15, Math.round((qty * ask0 * feeBps) / 10000 * 100) / 100);
-        const reserved = qty * ask0 + feeReserved;
-        const actual = qty * fillPrice + feeAmount;
-        const cashAdjust = reserved - actual;
+        const reservedPrincipal = qty * limitPrice;
+        const actualCost = qty * fillPrice + feeAmount;
+        const cashAdjust = reservedPrincipal - actualCost;
         if (cashAdjust !== 0) {
           cashAfterBuy = cash + cashAdjust;
           await supabase.from("game_players").update({ cash: cashAfterBuy }).eq("id", player.id);

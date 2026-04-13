@@ -7,29 +7,25 @@ type Position = { symbol: string; qty: number; avg_cost: number };
 type PendingOrder = { symbol: string; side: string; qty: number; limit_price: number };
 
 type Props = {
-  gameId: string;
   initialCash: number;
   myCash: number;
   positions: Position[];
   pendingOrders: PendingOrder[];
-  feeBps: number;
   leverageMultiplier?: number;
   onRefreshComplete?: () => void;
   refreshIntervalMs?: number;
 };
 
 
-function fmt(n: number, d = 0) {
+function fmt(n: number, d = 2) {
   return n.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 export function PortfolioSummary({
-  gameId,
   initialCash,
   myCash,
   positions,
   pendingOrders,
-  feeBps,
   leverageMultiplier = 1,
   onRefreshComplete,
   refreshIntervalMs = 20000,
@@ -80,13 +76,12 @@ export function PortfolioSummary({
     onRefreshComplete?.();
   };
 
-  // pendingOrders est désormais vide (ordres limite supprimés), gardé pour compatibilité.
-  const reserved = pendingOrders
+  // Réserve achats : déjà soustraite du cash DB — on la réintègre pour le total portefeuille (pas de frais réservés).
+  const reservedBuy = pendingOrders
     .filter((o) => o.side === "buy")
     .reduce((sum, o) => sum + o.limit_price * o.qty, 0);
-  const reserveFee = reserved > 0 ? Math.min(15, Math.round((reserved * feeBps) / 10000 * 100) / 100) : 0;
 
-  let totalValue = myCash + reserved + reserveFee;
+  let totalValue = myCash + reservedBuy;
   for (const pos of positions) {
     const pr = prices[pos.symbol];
     if (pr != null) {
@@ -96,7 +91,6 @@ export function PortfolioSummary({
       totalValue += positionValue;
     }
   }
-  // Actions réservées (ordres limite vente) valorisées au cours actuel
   pendingOrders
     .filter((o) => o.side === "sell")
     .forEach((o) => {
@@ -112,7 +106,7 @@ export function PortfolioSummary({
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
       <div>
-        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cash</p>
+        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cash disponible</p>
         <p className="text-sm font-semibold text-slate-900 font-mono">
           {fmt(myCash, 2)} USD
         </p>
@@ -127,9 +121,9 @@ export function PortfolioSummary({
         </p>
       </div>
       <div className="text-right">
-        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Total</p>
+        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Total portefeuille</p>
         <p className="text-sm font-semibold text-slate-900 font-mono">
-          {loading && symbols.length > 0 && Object.keys(prices).length === 0 ? "…" : fmt(totalValue, 0)} USD
+          {loading && symbols.length > 0 && Object.keys(prices).length === 0 ? "…" : fmt(totalValue, 2)} USD
         </p>
       </div>
       <button

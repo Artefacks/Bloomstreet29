@@ -8,6 +8,7 @@ import { MarketSection } from "./MarketSection";
 import { EquityChart } from "./EquityChart";
 import { PositionsCard } from "./PositionsCard";
 import { PortfolioSection } from "./PortfolioSection";
+import { PendingOrdersPanel } from "./PendingOrdersPanel";
 
 export default async function GamePage({
   params,
@@ -136,8 +137,12 @@ export default async function GamePage({
               initialCash={state.game.initial_cash}
               myCash={state.myCash ?? 0}
               positions={state.myPositions}
-              pendingOrders={[]}
-              feeBps={state.game.fee_bps}
+              pendingOrders={state.pendingOrders.map((o) => ({
+                symbol: o.symbol,
+                side: o.side,
+                qty: o.qty,
+                limit_price: o.limit_price,
+              }))}
               leverageMultiplier={state.game.leverage_multiplier}
             />
           </div>
@@ -204,6 +209,12 @@ export default async function GamePage({
 
           </div>
         </div>
+
+        <PendingOrdersPanel
+          gameId={gameId}
+          orders={state.pendingOrders}
+          gameEnded={state.game.status === "finished"}
+        />
 
         {/* ═══ BOTTOM: Orders history (collapsible) ═══ */}
         <details className="bg-white rounded-xl shadow-sm border border-slate-200">

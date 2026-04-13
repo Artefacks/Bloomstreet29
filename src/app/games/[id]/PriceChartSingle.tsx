@@ -3,12 +3,10 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   createChart,
-  CandlestickSeries,
   LineSeries,
   TickMarkType,
   type IChartApi,
   type ISeriesApi,
-  type CandlestickData,
   type LineData,
   type Time,
   ColorType,
@@ -17,7 +15,6 @@ import { getExchangeForSymbol, isMarketOpenAt } from "@/lib/sectors";
 
 type RawPoint = { price: number; at: string };
 type TimeRange = "1H" | "4H" | "1J" | "1S";
-type ChartMode = "line" | "candle";
 
 const RANGE_CONFIG: Record<TimeRange, { limit: number; candleMinutes: number; label: string }> = {
   "1H": { limit: 60, candleMinutes: 1, label: "1H" },
@@ -29,32 +26,6 @@ const RANGE_CONFIG: Record<TimeRange, { limit: number; candleMinutes: number; la
 function toUnixBucket(at: string, candleMinutes: number): number {
   const ts = new Date(at).getTime();
   return Math.floor(ts / (candleMinutes * 60_000)) * candleMinutes * 60;
-}
-
-function groupIntoCandles(points: RawPoint[], candleMinutes: number, symbol: string): CandlestickData[] {
-  if (points.length === 0) return [];
-  const exchange = getExchangeForSymbol(symbol);
-  const buckets = new Map<number, number[]>();
-
-  for (const p of points) {
-    if (!isMarketOpenAt(exchange, new Date(p.at).getTime())) continue;
-    const bucket = toUnixBucket(p.at, candleMinutes);
-    if (!buckets.has(bucket)) buckets.set(bucket, []);
-    buckets.get(bucket)!.push(p.price);
-  }
-
-  const candles: CandlestickData[] = [];
-  for (const key of [...buckets.keys()].sort((a, b) => a - b)) {
-    const prices = buckets.get(key)!;
-    candles.push({
-      time: key as Time,
-      open: prices[0],
-      high: Math.max(...prices),
-      low: Math.min(...prices),
-      close: prices[prices.length - 1],
-    });
-  }
-  return candles;
 }
 
 /** Formate le timestamp en heure locale (évite l'affichage UTC -1h) */
@@ -109,7 +80,6 @@ export function PriceChartSingle({
   const [raw, setRaw] = useState<RawPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<TimeRange>("4H");
-  const [mode, setMode] = useState<ChartMode>("line");
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
@@ -164,7 +134,6 @@ export function PriceChartSingle({
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [symbol, fetchHistory]);
 
-  const candles = useMemo(() => groupIntoCandles(raw, config.candleMinutes, symbol), [raw, config.candleMinutes, symbol]);
   const lineData = useMemo(() => toLineData(raw, config.candleMinutes, symbol), [raw, config.candleMinutes, symbol]);
 
   const stats = useMemo(() => {
@@ -186,8 +155,7 @@ export function PriceChartSingle({
   // Create / update chart
   useEffect(() => {
     if (!chartContainerRef.current) return;
-    const hasData = mode === "candle" ? candles.length >= 2 : lineData.length >= 2;
-    if (!hasData) return;
+    if (lineData.length < 2) return;
 
     if (chartRef.current) {
       chartRef.current.remove();
@@ -224,27 +192,14 @@ export function PriceChartSingle({
       },
     });
 
-    let series: ISeriesApi<"Candlestick"> | ISeriesApi<"Line">;
-    if (mode === "candle") {
-      series = chart.addSeries(CandlestickSeries, {
-        upColor: "#16a34a",
-        downColor: "#dc2626",
-        borderUpColor: "#16a34a",
-        borderDownColor: "#dc2626",
-        wickUpColor: "#16a34a",
-        wickDownColor: "#dc2626",
-      });
-      series.setData(candles);
-    } else {
-      const color = trend === "up" ? "#16a34a" : "#dc2626";
-      series = chart.addSeries(LineSeries, {
-        color,
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 4,
-      });
-      series.setData(lineData);
-    }
+    const color = trend === "up" ? "#16a34a" : "#dc2626";
+    const series: ISeriesApi<"Line"> = chart.addSeries(LineSeries, {
+      color,
+      lineWidth: 2,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+    });
+    series.setData(lineData);
 
     chart.timeScale().fitContent();
     chartRef.current = chart;
@@ -263,7 +218,7 @@ export function PriceChartSingle({
         chartRef.current = null;
       }
     };
-  }, [candles, lineData, mode, trend, symbol]);
+  }, [lineData, trend, symbol]);
 
   if (!symbol) return null;
 
@@ -304,28 +259,6 @@ export function PriceChartSingle({
           </div>
         )}
         <div className="flex items-center gap-2">
-          {/* Chart mode toggle */}
-          <div className="flex bg-slate-100 rounded overflow-hidden">
-            <button
-              onClick={() => setMode("line")}
-              className={`px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                mode === "line" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-200"
-              }`}
-              title="Courbe"
-            >
-              Ligne
-            </button>
-            <button
-              onClick={() => setMode("candle")}
-              className={`px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                mode === "candle" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-200"
-              }`}
-              title="Chandeliers"
-            >
-              Bougie
-            </button>
-          </div>
-          {/* Time range */}
           <div className="flex gap-0.5">
             {(Object.keys(RANGE_CONFIG) as TimeRange[]).map((r) => (
               <button

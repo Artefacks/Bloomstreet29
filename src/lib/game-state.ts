@@ -37,7 +37,16 @@ export type GameState = {
     pnlPct: number;
   }[];
   orders: { id: string; symbol: string; side: string; qty: number; price: number; fee_amount: number; created_at: string }[];
-  pendingOrders: { id: string; symbol: string; side: string; qty: number; limit_price: number; status: string; created_at: string }[];
+  pendingOrders: {
+    id: string;
+    symbol: string;
+    side: string;
+    qty: number;
+    limit_price: number;
+    status: string;
+    created_at: string;
+    market_deferred: boolean;
+  }[];
   isMember: boolean;
 };
 
@@ -129,10 +138,17 @@ export async function getGameState(
     .select("user_id, symbol, qty, avg_cost")
     .eq("game_id", gameId);
 
+  const { data: pendingOpen } = await supabase
+    .from("pending_orders")
+    .select("id, user_id, symbol, side, qty, limit_price, status, created_at, market_deferred")
+    .eq("game_id", gameId)
+    .eq("status", "open");
+
   const valuationSymbols = [
     ...new Set([
       ...visibleInstruments.map((i) => i.symbol),
       ...(allPositions ?? []).map((p) => p.symbol),
+      ...(pendingOpen ?? []).map((o) => o.symbol as string),
     ]),
   ];
 
@@ -181,11 +197,26 @@ export async function getGameState(
     positionMap.set(p.user_id, list);
   });
 
+  const buyReserveByUser = new Map<string, number>();
+  const sellPendingByUser = new Map<string, { symbol: string; qty: number }[]>();
+  (pendingOpen ?? []).forEach((o) => {
+    const uid = o.user_id as string;
+    if (o.side === "buy") {
+      const add = Number(o.qty) * Number(o.limit_price);
+      buyReserveByUser.set(uid, (buyReserveByUser.get(uid) ?? 0) + add);
+    } else {
+      const list = sellPendingByUser.get(uid) ?? [];
+      list.push({ symbol: o.symbol as string, qty: Number(o.qty) });
+      sellPendingByUser.set(uid, list);
+    }
+  });
+
   const leverage = Number(game.leverage_multiplier ?? 1);
 
   const leaderboard = (players ?? []).map((p) => {
     const posList = positionMap.get(p.user_id) ?? [];
     let value = Number(p.cash);
+    value += buyReserveByUser.get(p.user_id) ?? 0;
     posList.forEach(({ symbol, qty, avg_cost }) => {
       const pr = priceMap.get(symbol);
       if (pr != null) {
@@ -195,6 +226,10 @@ export async function getGameState(
         const positionValue = costBasis + (marketValue - costBasis) * leverage;
         value += positionValue;
       }
+    });
+    (sellPendingByUser.get(p.user_id) ?? []).forEach(({ symbol, qty }) => {
+      const pr = priceMap.get(symbol);
+      if (pr != null) value += qty * pr;
     });
     const pnl = value - initialCash;
     const pnlPct = initialCash > 0 ? (pnl / initialCash) * 100 : 0;
@@ -252,7 +287,18 @@ export async function getGameState(
       fee_amount: Number((o as { fee_amount?: number }).fee_amount ?? 0),
       created_at: o.created_at,
     })),
-    pendingOrders: [],
+    pendingOrders: (pendingOpen ?? [])
+      .filter((o) => o.user_id === userId)
+      .map((o) => ({
+        id: o.id as string,
+        symbol: o.symbol as string,
+        side: o.side as string,
+        qty: Number(o.qty),
+        limit_price: Number(o.limit_price),
+        status: o.status as string,
+        created_at: o.created_at as string,
+        market_deferred: Boolean((o as { market_deferred?: boolean }).market_deferred),
+      })),
     isMember: true,
   };
 }
